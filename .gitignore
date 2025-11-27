@@ -1,0 +1,72 @@
+# Object files
+*.o
+*.obj
+
+# Dependency files
+*.d
+
+# Libraries
+*.a
+*.lib
+*.la
+*.lai
+*.lo
+
+# Shared libraries
+*.so
+*.so.*
+*.dll
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+src/linkcoind
+linkcoin-qt
+linkcoin-qt_test
+src/test_linkcoin
+
+# Build directories
+build/
+release/
+debug/
+src/obj/
+src/leveldb/libleveldb.a
+src/leveldb/libmemenv.a
+
+# Qt generated files
+Makefile
+Makefile.Release
+Makefile.Debug
+Makefile.test
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+.qmake.stash
+
+# Depends system artifacts
+depends/built
+depends/sources
+depends/work
+depends/x86_64-pc-linux-gnu
+depends/x86_64-w64-mingw32
+depends/i686-pc-linux-gnu
+depends/i686-w64-mingw32
+depends/x86_64-apple-darwin11
+depends/sdk-sources
+
+# Logs and temporary files
+*.log
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Explicitly allow Makefiles (as requested)
+!makefile.unix
+!makefile.linux-mingw
+!makefile.osx
+!Makefile.depends.linux
+!Makefile.depends.windows
+!depends/Makefile

@@ -53,6 +53,8 @@ enum RPCErrorCode
     // P2P client errors
     RPC_CLIENT_NOT_CONNECTED        = -9,  // Bitcoin is not connected
     RPC_CLIENT_IN_INITIAL_DOWNLOAD  = -10, // Still downloading initial blocks
+    RPC_CLIENT_NODE_ALREADY_ADDED   = -23, // Node already added
+    RPC_CLIENT_NODE_NOT_ADDED       = -24, // Node not added
 
     // Wallet errors
     RPC_WALLET_ERROR                = -4,  // Unspecified problem with wallet (key not found etc.)
@@ -206,5 +208,11 @@ extern json_spirit::Value getblock(const json_spirit::Array& params, bool fHelp)
 extern json_spirit::Value gettxoutsetinfo(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value gettxout(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value verifychain(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value getblockchaininfo(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value getnetworkinfo(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value getwalletinfo(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value getmempoolinfo(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value getnetworkstats(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value getchaintxstats(const json_spirit::Array& params, bool fHelp);
 
 #endif

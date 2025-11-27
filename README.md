@@ -21,6 +21,92 @@ The rest is the same as Bitcoin.
 For more information, as well as an immediately useable, binary version of
 the Linkcoin client sofware, see http://www.linkcoin.org.
 
+Building
+--------
+
+### Compiler Machine
+**Recommended Environment:** Debian 7 (Wheezy)
+This environment is required for binary compatibility with older systems and to ensure the `depends` system works as expected with the provided Qt 4.8.7 patches.
+
+### Static Build with Depends System (Recommended)
+
+Linkcoin uses the Bitcoin `depends` system to build fully static binaries with no external dependencies. This is the only supported way to build the release binaries.
+
+**Features:**
+- ✅ Fully static binaries (portable, no dependencies)
+- ✅ Cross-platform (Linux, Windows)
+- ✅ Reproducible builds
+- ✅ Qt 4.8.7 (compatible with old MinGW 4.6+)
+
+#### 1. Build Dependencies
+First, build the dependencies for your target platform. This step only needs to be done once or when dependencies change.
+
+**For Linux (x86_64):**
+```bash
+cd depends
+make HOST=x86_64-pc-linux-gnu -j$(nproc)
+cd ..
+```
+
+**For Windows (x86_64):**
+```bash
+cd depends
+make HOST=x86_64-w64-mingw32 -j$(nproc)
+cd ..
+```
+
+#### 2. Build Linkcoin
+Use the provided `build.sh` script to compile the daemon and GUI.
+
+**Linux:**
+```bash
+./build.sh --linux
+```
+*Result:* `src/linkcoind` and `linkcoin-qt`
+
+**Windows:**
+```bash
+./build.sh --windows
+```
+*Result:* `src/linkcoind.exe` and `release/linkcoin-qt.exe`
+
+**Build Options:**
+- `--daemon-only`: Build only `linkcoind` (skip Qt GUI)
+- `--help`: Show all available options
+
+---
+
+### Manual Build (Legacy/Development)
+
+For development purposes, you can still use the legacy makefiles, but this is not recommended for release builds.
+
+**Linux Daemon:**
+```bash
+cd src
+make -f makefile.unix
+```
+
+**Linux GUI:**
+```bash
+qmake
+make
+```
+
+
+For development with system libraries:
+
+```bash
+# Build daemon
+cd src
+make -f makefile.unix
+
+# Build GUI
+qmake
+make
+```
+
+**Note:** Produces dynamically-linked binaries requiring system libraries.
+
 License
 -------
 

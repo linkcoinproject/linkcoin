@@ -1097,6 +1097,13 @@ static const int64 nTargetTimespan = 4 * 60; // Linkcoin: 4 mins
 static const int64 nTargetSpacing = 4 * 60; // Linkcoin: 4 minutes
 static const int64 nInterval = nTargetTimespan / nTargetSpacing;
 
+// Classic2 Adaptive Difficulty parameters (Block 2500+)
+static const int nClassic2Height = 2500; // Activation height for Classic2 Adaptive
+static const int64 nClassic2AveragingWindow = 24; // 24 blocks averaging window
+static const int64 nClassic2MaxAdjustDown = 16; // Max 16% difficulty decrease per adjustment
+static const int64 nClassic2MaxAdjustUp = 8;    // Max 8% difficulty increase per adjustment
+static const int64 nClassic2DampeningFactor = 3; // Dampening factor for smoother adjustments
+
 //
 // minimum amount of work that could possibly be required nTime after
 // minimum work required was nBase
@@ -1122,13 +1129,180 @@ unsigned int ComputeMinWork(unsigned int nBase, int64 nTime)
     return bnResult.GetCompact();
 }
 
-unsigned int static GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
+// Classic2 Adaptive Difficulty Algorithm
+// More robust with tighter controls and better timestamp validation
+unsigned int static Classic2AdaptiveDifficulty(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
+{
+    unsigned int nProofOfWorkLimit = bnProofOfWorkLimit.GetCompact();
+    
+    // Genesis block
+    if (pindexLast == NULL)
+        return nProofOfWorkLimit;
+    
+    // Special difficulty rule for testnet
+    if (fTestNet)
+    {
+        if (pblock && pblock->nTime > pindexLast->nTime + nTargetSpacing * 2)
+            return nProofOfWorkLimit;
+    }
+    
+    // Calculate the averaging window timespan
+    int64 nTargetTimespanCurrent = nClassic2AveragingWindow * nTargetSpacing;
+    
+    // Collect blocks for averaging
+    const CBlockIndex* pindexFirst = pindexLast;
+    int64 nBlocksBack = 0;
+    
+    // Go back the averaging window
+    for (nBlocksBack = 0; nBlocksBack < nClassic2AveragingWindow && pindexFirst; nBlocksBack++)
+    {
+        if (pindexFirst->pprev == NULL)
+            break;
+        pindexFirst = pindexFirst->pprev;
+    }
+    
+    // Not enough blocks yet
+    if (pindexFirst == NULL || nBlocksBack < nClassic2AveragingWindow)
+        return pindexLast->nBits;
+    
+    // Calculate actual timespan
+    int64 nActualTimespan = pindexLast->GetBlockTime() - pindexFirst->GetBlockTime();
+    
+    // Timestamp validation - prevent manipulation
+    if (pblock)
+    {
+        int64 timeDiff = pblock->nTime - pindexLast->nTime;
+
+        // Emergency rule for block 2500 (transition to Classic2)
+        if (pindexLast->nHeight == 2499 && timeDiff > nTargetSpacing * 2)
+            return nProofOfWorkLimit;
+        
+        // Reject blocks with timestamps too far in the future
+        if (timeDiff > nTargetSpacing * 2)
+        {
+            // Allow some leniency but not too much
+            if (timeDiff > nTargetSpacing * 4)
+                return pindexLast->nBits; // Keep same difficulty
+        }
+        
+        // Reject blocks with timestamps in the past
+        if (timeDiff < -60) // Allow 60 seconds clock drift
+            return pindexLast->nBits;
+    }
+    
+    // Apply dampening factor for smoother adjustments
+    int64 nAdjustedTimespan = nTargetTimespanCurrent + 
+                              (nActualTimespan - nTargetTimespanCurrent) / nClassic2DampeningFactor;
+    
+    // Calculate min/max bounds (tighter than previous algorithms)
+    int64 nMinTimespan = nTargetTimespanCurrent * (100 - nClassic2MaxAdjustUp) / 100;
+    int64 nMaxTimespan = nTargetTimespanCurrent * (100 + nClassic2MaxAdjustDown) / 100;
+    
+    // Apply bounds
+    if (nAdjustedTimespan < nMinTimespan)
+        nAdjustedTimespan = nMinTimespan;
+    if (nAdjustedTimespan > nMaxTimespan)
+        nAdjustedTimespan = nMaxTimespan;
+    
+    // Calculate new difficulty
+    CBigNum bnNew;
+    bnNew.SetCompact(pindexLast->nBits);
+    bnNew *= nAdjustedTimespan;
+    bnNew /= nTargetTimespanCurrent;
+    
+    // Ensure we don't go below minimum difficulty
+    if (bnNew > bnProofOfWorkLimit)
+        bnNew = bnProofOfWorkLimit;
+    
+    // Additional safety: prevent difficulty from dropping too low too fast
+    // If difficulty would drop more than 50% in one adjustment, limit it
+    CBigNum bnLastTarget;
+    bnLastTarget.SetCompact(pindexLast->nBits);
+    CBigNum bnMaxDrop = bnLastTarget * 3 / 2; // Max 50% drop per adjustment
+    
+    if (bnNew > bnMaxDrop)
+        bnNew = bnMaxDrop;
+    
+    return bnNew.GetCompact();
+}
+
+// Legacy DigiShield parameters used before Linkcoin DigiShield activation
+// Activates at block 388
+unsigned int static DigiShield(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
+{
+    unsigned int nProofOfWorkLimit = bnProofOfWorkLimit.GetCompact();
+    
+    // Genesis block
+    if (pindexLast == NULL)
+        return nProofOfWorkLimit;
+    
+    const CBlockIndex* pindexPrev = pindexLast;
+    
+    // Special difficulty rule for testnet
+    if (fTestNet)
+    {
+        // If the new block's timestamp is more than 2 * target spacing
+        // then allow mining of a min-difficulty block
+        if (pblock->nTime > pindexLast->nTime + nTargetSpacing * 2)
+            return nProofOfWorkLimit;
+    }
+    
+    // DigiShield uses a 60-block average
+    int64 nBlocksToGoBack = 60;
+    
+    // Make sure we have enough blocks
+    if (pindexLast->nHeight < nBlocksToGoBack)
+        nBlocksToGoBack = pindexLast->nHeight;
+    
+    const CBlockIndex* pindexFirst = pindexLast;
+    for (int i = 0; pindexFirst && i < nBlocksToGoBack; i++)
+        pindexFirst = pindexFirst->pprev;
+    
+    if (pindexFirst == NULL)
+        return nProofOfWorkLimit;
+    
+    // Calculate actual timespan
+    int64 nActualTimespan = pindexLast->GetBlockTime() - pindexFirst->GetBlockTime();
+    int64 nTargetTimespanCurrent = nBlocksToGoBack * nTargetSpacing;
+    
+    // Apply asymmetric dampening
+    if (nActualTimespan < (nTargetTimespanCurrent - (nTargetTimespanCurrent/4)))
+        nActualTimespan = (nTargetTimespanCurrent - (nTargetTimespanCurrent/4));
+    if (nActualTimespan > (nTargetTimespanCurrent + (nTargetTimespanCurrent/2)))
+        nActualTimespan = (nTargetTimespanCurrent + (nTargetTimespanCurrent/2));
+    
+    // Retarget
+    CBigNum bnNew;
+    bnNew.SetCompact(pindexLast->nBits);
+    bnNew *= nActualTimespan;
+    bnNew /= nTargetTimespanCurrent;
+    
+    if (bnNew > bnProofOfWorkLimit)
+        bnNew = bnProofOfWorkLimit;
+    
+    return bnNew.GetCompact();
+}
+
+unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
 {
     unsigned int nProofOfWorkLimit = bnProofOfWorkLimit.GetCompact();
 
     // Genesis block
     if (pindexLast == NULL)
         return nProofOfWorkLimit;
+
+    // Classic2 Adaptive Difficulty (Block 2500+)
+    if (pindexLast->nHeight + 1 >= nClassic2Height)
+    {
+        return Classic2AdaptiveDifficulty(pindexLast, pblock);
+    }
+
+    // Legacy DigiShield activates at block 388
+    int nDigiShieldFork = 388;
+    if (pindexLast->nHeight + 1 >= nDigiShieldFork)
+    {
+        return DigiShield(pindexLast, pblock);
+    }
 
     // Only change once per interval
     if ((pindexLast->nHeight+1) % nInterval != 0)

@@ -1,0 +1,161 @@
+# Makefile for Linkcoin using depends system (Linux)
+# Build dependencies first: cd depends && make HOST=x86_64-pc-linux-gnu
+# Then build: make -f Makefile.depends.linux
+
+# Depends prefix
+DEPENDS_PREFIX = $(CURDIR)/depends/x86_64-pc-linux-gnu
+
+# Compiler
+CXX = g++
+CC = gcc
+LINK = $(CXX)
+
+# Flags
+DEFS = -DBOOST_SPIRIT_THREADSAFE -D_FILE_OFFSET_BITS=64
+DEFS += -DHAVE_BUILD_INFO
+
+# Include paths from depends
+DEFS += -I$(CURDIR)
+DEFS += -I$(CURDIR)/src
+DEFS += -I$(CURDIR)/src/obj
+DEFS += -I$(DEPENDS_PREFIX)/include
+
+# Library paths from depends
+LIBS = -L$(DEPENDS_PREFIX)/lib
+
+# Static linking flags
+LIBS += -Wl,-Bstatic
+LIBS += -lboost_system-mt
+LIBS += -lboost_filesystem-mt
+LIBS += -lboost_program_options-mt
+LIBS += -lboost_thread-mt
+LIBS += -lboost_chrono-mt
+LIBS += -ldb_cxx
+LIBS += -lssl
+LIBS += -lcrypto
+
+# UPnP support (optional)
+USE_UPNP ?= 1
+ifneq ($(USE_UPNP), 0)
+	DEFS += -DUSE_UPNP=$(USE_UPNP)
+	LIBS += -lminiupnpc
+endif
+
+# IPv6 support
+USE_IPV6 ?= 1
+ifneq ($(USE_IPV6), 0)
+	DEFS += -DUSE_IPV6=$(USE_IPV6)
+endif
+
+# Dynamic system libraries
+LIBS += -Wl,-Bdynamic
+LIBS += -lz
+LIBS += -ldl
+LIBS += -lpthread
+LIBS += -lrt
+
+# Hardening flags
+HARDENING = -fno-stack-protector
+HARDENING += -fstack-protector-all -Wstack-protector
+HARDENING += -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2
+
+LDHARDENING = -Wl,-z,relro -Wl,-z,now
+
+# Compiler flags
+DEBUGFLAGS = -g
+CXXFLAGS = -O2 -pthread -Wall -Wextra -Wformat -Wformat-security -Wno-unused-parameter
+CXXFLAGS += $(DEBUGFLAGS) $(DEFS) $(HARDENING)
+
+# Linker flags
+LDFLAGS = $(LDHARDENING)
+
+# LevelDB
+LEVELDB_LIBS = $(CURDIR)/src/leveldb/libleveldb.a $(CURDIR)/src/leveldb/libmemenv.a
+DEFS += -I$(CURDIR)/src/leveldb/include
+DEFS += -I$(CURDIR)/src/leveldb/helpers
+
+# Object files
+OBJS = \
+    src/obj/alert.o \
+    src/obj/version.o \
+    src/obj/checkpoints.o \
+    src/obj/netbase.o \
+    src/obj/addrman.o \
+    src/obj/crypter.o \
+    src/obj/key.o \
+    src/obj/db.o \
+    src/obj/init.o \
+    src/obj/keystore.o \
+    src/obj/main.o \
+    src/obj/net.o \
+    src/obj/protocol.o \
+    src/obj/bitcoinrpc.o \
+    src/obj/rpcdump.o \
+    src/obj/rpcnet.o \
+    src/obj/rpcmining.o \
+    src/obj/rpcwallet.o \
+    src/obj/rpcblockchain.o \
+    src/obj/rpcrawtransaction.o \
+    src/obj/script.o \
+    src/obj/scrypt.o \
+    src/obj/sync.o \
+    src/obj/util.o \
+    src/obj/wallet.o \
+    src/obj/walletdb.o \
+    src/obj/hash.o \
+    src/obj/bloom.o \
+    src/obj/noui.o \
+    src/obj/leveldb.o \
+    src/obj/txdb.o
+
+# SSE2 support (optional)
+ifdef USE_SSE2
+	DEFS += -DUSE_SSE2
+	OBJS += src/obj/scrypt-sse2.o
+endif
+
+# Default target
+all: src/linkcoind
+
+# LevelDB
+src/leveldb/libleveldb.a:
+	@echo "Building LevelDB..."
+	@cd src/leveldb && $(MAKE) CC=$(CC) CXX=$(CXX) OPT="$(CXXFLAGS)" libleveldb.a libmemenv.a
+
+# Build info
+src/obj/build.h: FORCE
+	@/bin/sh share/genbuild.sh src/obj/build.h
+src/version.cpp: src/obj/build.h
+
+# SSE2 objects
+src/obj/%-sse2.o: src/%-sse2.cpp
+	$(CXX) -c $(CXXFLAGS) -msse2 -MMD -MF $(@:%.o=%.d) -o $@ $<
+
+# Regular objects
+src/obj/%.o: src/%.cpp
+	@mkdir -p src/obj
+	$(CXX) -c $(CXXFLAGS) -MMD -MF $(@:%.o=%.d) -o $@ $<
+
+# Link daemon
+src/linkcoind: src/leveldb/libleveldb.a $(OBJS)
+	$(LINK) $(CXXFLAGS) -o $@ $^ $(LEVELDB_LIBS) $(LDFLAGS) $(LIBS)
+	@echo ""
+	@echo "Build complete: src/linkcoind"
+	@echo "Checking static linking..."
+	@ldd src/linkcoind || echo "Fully static binary"
+
+# Clean
+clean:
+	-rm -f src/linkcoind
+	-rm -f src/obj/*.o
+	-rm -f src/obj/*.d
+	-rm -f src/obj/build.h
+	-cd src/leveldb && $(MAKE) clean || true
+
+# Phony targets
+.PHONY: all clean FORCE
+
+FORCE:
+
+# Include dependencies
+-include src/obj/*.d

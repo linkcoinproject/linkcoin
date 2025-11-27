@@ -490,8 +490,11 @@ Value getblocktemplate(const Array& params, bool fHelp)
     }
     CBlock* pblock = &pblocktemplate->block; // pointer for convenience
 
-    // Update nTime
+    // Update nTime and refresh difficulty so adaptive rules stay current
     pblock->UpdateTime(pindexPrev);
+    unsigned int nUpdatedBits = GetNextWorkRequired(pindexPrev, pblock);
+    if (nUpdatedBits != pblock->nBits)
+        pblock->nBits = nUpdatedBits;
     pblock->nNonce = 0;
 
     Array transactions;
@@ -585,4 +588,41 @@ Value submitblock(const Array& params, bool fHelp)
         return "rejected"; // TODO: report validation state
 
     return Value::null;
+}
+
+Value getmempoolinfo(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "getmempoolinfo\n"
+            "Returns details on the active state of the TX memory pool.\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"size\": xxxxx,               (numeric) Current tx count\n"
+            "  \"bytes\": xxxxx,              (numeric) Sum of all tx sizes\n"
+            "  \"usage\": xxxxx,              (numeric) Total memory usage for the mempool\n"
+            "  \"maxmempool\": xxxxx,         (numeric) Maximum memory usage for the mempool\n"
+            "  \"mempoolminfee\": x.xxxxxx    (numeric) Minimum fee for tx to be accepted\n"
+            "}\n"
+            "\nExamples:\n"
+            "> linkcoin-cli getmempoolinfo\n"
+            "> curl --user myusername --data-binary '{\"jsonrpc\": \"1.0\", \"id\":\"curltest\", \"method\": \"getmempoolinfo\", \"params\": [] }' -H 'content-type: text/plain;' http://127.0.0.1:9600/\n"
+        );
+
+    int64_t nBytes = 0;
+    {
+        LOCK(mempool.cs);
+        for (map<uint256, CTransaction>::iterator it = mempool.mapTx.begin(); it != mempool.mapTx.end(); ++it) {
+            nBytes += ::GetSerializeSize(it->second, SER_NETWORK, PROTOCOL_VERSION);
+        }
+    }
+
+    Object obj;
+    obj.push_back(Pair("size", (int)mempool.size()));
+    obj.push_back(Pair("bytes", (int)nBytes));
+    obj.push_back(Pair("usage", (int)nBytes)); // Approximation
+    obj.push_back(Pair("maxmempool", (int64_t)GetArg("-maxmempool", 300) * 1000000));
+    obj.push_back(Pair("mempoolminfee", ValueFromAmount(CTransaction::nMinTxFee)));
+
+    return obj;
 }

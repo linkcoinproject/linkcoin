@@ -5,6 +5,7 @@
 
 #include "main.h"
 #include "bitcoinrpc.h"
+#include "checkpoints.h"
 
 using namespace json_spirit;
 using namespace std;
@@ -268,3 +269,108 @@ Value verifychain(const Array& params, bool fHelp)
     return VerifyDB(nCheckLevel, nCheckDepth);
 }
 
+
+Value getblockchaininfo(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "getblockchaininfo\n"
+            "Returns an object containing various state info regarding block chain processing.\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"chain\": \"xxxx\",        (string) current network name as defined in BIP70 (main, test, regtest)\n"
+            "  \"blocks\": xxxxxx,         (numeric) the current number of blocks processed in the server\n"
+            "  \"headers\": xxxxxx,        (numeric) the current number of headers we have validated\n"
+            "  \"bestblockhash\": \"...\", (string) the hash of the currently best block\n"
+            "  \"difficulty\": xxxxxx,     (numeric) the current difficulty\n"
+            "  \"verificationprogress\": xxxx, (numeric) estimate of verification progress [0..1]\n"
+            "  \"chainwork\": \"xxxx\"     (string) total amount of work in active chain, in hexadecimal\n"
+            "}\n"
+            "\nExamples:\n"
+            "> linkcoin-cli getblockchaininfo\n"
+            "> curl --user myusername --data-binary '{\"jsonrpc\": \"1.0\", \"id\":\"curltest\", \"method\": \"getblockchaininfo\", \"params\": [] }' -H 'content-type: text/plain;' http://127.0.0.1:9600/\n"
+        );
+
+    Object obj;
+    obj.push_back(Pair("chain",           fTestNet ? "test" : "main"));
+    obj.push_back(Pair("blocks",          (int)nBestHeight));
+    obj.push_back(Pair("headers",         (int)nBestHeight));
+    obj.push_back(Pair("bestblockhash",   hashBestChain.GetHex()));
+    obj.push_back(Pair("difficulty",      (double)GetDifficulty()));
+    obj.push_back(Pair("verificationprogress", Checkpoints::GuessVerificationProgress(pindexBest)));
+    obj.push_back(Pair("chainwork",       pindexBest->nChainWork.GetHex()));
+    return obj;
+}
+
+Value getchaintxstats(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() > 2)
+        throw runtime_error(
+            "getchaintxstats ( nblocks blockhash )\n"
+            "\nCompute statistics about the total number and rate of transactions in the chain.\n"
+            "\nArguments:\n"
+            "1. nblocks      (numeric, optional) Size of the window in number of blocks (default: one month).\n"
+            "2. blockhash    (string, optional) The hash of the block that ends the window.\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"time\": xxxxx,                (numeric) The timestamp for the final block in the window in UNIX format.\n"
+            "  \"txcount\": xxxxx,             (numeric) The total number of transactions in the chain up to that point.\n"
+            "  \"window_final_block_hash\": \"...\",      (string) The hash of the final block in the window.\n"
+            "  \"window_block_count\": xxxxx,  (numeric) Size of the window in number of blocks.\n"
+            "  \"window_tx_count\": xxxxx,     (numeric) The number of transactions in the window. Only returned if \"window_block_count\" > 0.\n"
+            "  \"window_interval\": xxxxx,     (numeric) The elapsed time in the window in seconds. Only returned if \"window_block_count\" > 0.\n"
+            "  \"txrate\": x.xx,               (numeric) The average rate of transactions per second in the window. Only returned if \"window_interval\" > 0.\n"
+            "}\n"
+            "\nExamples:\n"
+            "> linkcoin-cli getchaintxstats\n"
+            "> curl --user myusername --data-binary '{\"jsonrpc\": \"1.0\", \"id\":\"curltest\", \"method\": \"getchaintxstats\", \"params\": [2016] }' -H 'content-type: text/plain;' http://127.0.0.1:9600/\n"
+        );
+
+    const CBlockIndex* pindex = pindexBest;
+    int blockcount = 30 * 24 * 60 * 60 / 240; // By default: 1 month, assuming 4 min blocks (Linkcoin)
+
+    if (params.size() > 0 && !params[0].is_null()) {
+        blockcount = params[0].get_int();
+    }
+
+    if (params.size() > 1 && !params[1].is_null()) {
+        string strHash = params[1].get_str();
+        uint256 hash(strHash);
+        if (mapBlockIndex.count(hash) == 0)
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block not found");
+        pindex = mapBlockIndex[hash];
+        if (!pindex->IsInMainChain())
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Block is not in main chain");
+    }
+
+    assert(pindex != NULL);
+
+    if (blockcount < 1 || blockcount >= pindex->nHeight) {
+        blockcount = pindex->nHeight;
+    }
+
+    const CBlockIndex* pindexPast = pindex;
+    for (int i = 0; i < blockcount && pindexPast; i++) {
+        pindexPast = pindexPast->pprev;
+    }
+
+    if (pindexPast == NULL)
+        pindexPast = pindexGenesisBlock;
+
+    Object ret;
+    ret.push_back(Pair("time", (boost::int64_t)pindex->GetBlockTime()));
+    ret.push_back(Pair("txcount", (boost::int64_t)pindex->nChainTx));
+    ret.push_back(Pair("window_final_block_hash", pindex->GetBlockHash().GetHex()));
+    ret.push_back(Pair("window_block_count", blockcount));
+    if (blockcount > 0) {
+        int64 nTxCount = pindex->nChainTx - pindexPast->nChainTx;
+        int64 nInterval = pindex->GetBlockTime() - pindexPast->GetBlockTime();
+        ret.push_back(Pair("window_tx_count", (boost::int64_t)nTxCount));
+        ret.push_back(Pair("window_interval", (boost::int64_t)nInterval));
+        if (nInterval > 0) {
+            ret.push_back(Pair("txrate", ((double)nTxCount) / nInterval));
+        }
+    }
+
+    return ret;
+}

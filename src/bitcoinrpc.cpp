@@ -266,6 +266,12 @@ static const CRPCCommand vRPCCommands[] =
     { "lockunspent",            &lockunspent,            false,     false,      true },
     { "listlockunspent",        &listlockunspent,        false,     false,      true },
     { "verifychain",            &verifychain,            true,      false,      false },
+    { "getblockchaininfo",      &getblockchaininfo,      true,      false,      false },
+    { "getnetworkinfo",         &getnetworkinfo,         true,      false,      false },
+    { "getwalletinfo",          &getwalletinfo,          true,      false,      true },
+    { "getmempoolinfo",         &getmempoolinfo,         true,      false,      false },
+    { "getnetworkstats",        &getnetworkstats,        true,      false,      false },
+    { "getchaintxstats",        &getchaintxstats,        true,      false,      false },
 };
 
 CRPCTable::CRPCTable()

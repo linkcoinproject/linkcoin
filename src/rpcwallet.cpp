@@ -1617,3 +1617,40 @@ Value listlockunspent(const Array& params, bool fHelp)
     return ret;
 }
 
+
+Value getwalletinfo(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "getwalletinfo\n"
+            "Returns an object containing various wallet state info.\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"walletversion\": xxxxx,  (numeric) the wallet version\n"
+            "  \"balance\": xxxxxxx,      (numeric) the total confirmed balance of the wallet in LTC\n"
+            "  \"unconfirmed_balance\": xxxxxxx, (numeric) the total unconfirmed balance of the wallet in LTC\n"
+            "  \"immature_balance\": xxxxxxx, (numeric) the total immature balance of the wallet in LTC\n"
+            "  \"txcount\": xxxxxxx,      (numeric) the total number of transactions in the wallet\n"
+            "  \"keypoololdest\": xxxxxx, (numeric) the timestamp (seconds since GMT epoch) of the oldest pre-generated key in the key pool\n"
+            "  \"keypoolsize\": xxxx,     (numeric) how many new keys are pre-generated\n"
+            "  \"unlocked_until\": ttt,   (numeric) the timestamp in seconds since epoch (midnight Jan 1 1970 GMT) that the wallet is unlocked for transfers, or 0 if the wallet is locked\n"
+            "  \"paytxfee\": x.xxxxxx,    (numeric) the transaction fee configuration, set in LTC/KB\n"
+            "}\n"
+            "\nExamples:\n"
+            "> linkcoin-cli getwalletinfo\n"
+            "> curl --user myusername --data-binary '{\"jsonrpc\": \"1.0\", \"id\":\"curltest\", \"method\": \"getwalletinfo\", \"params\": [] }' -H 'content-type: text/plain;' http://127.0.0.1:9600/\n"
+        );
+
+    Object obj;
+    obj.push_back(Pair("walletversion", pwalletMain->GetVersion()));
+    obj.push_back(Pair("balance",       ValueFromAmount(pwalletMain->GetBalance())));
+    obj.push_back(Pair("unconfirmed_balance", ValueFromAmount(pwalletMain->GetUnconfirmedBalance())));
+    obj.push_back(Pair("immature_balance", ValueFromAmount(pwalletMain->GetImmatureBalance())));
+    obj.push_back(Pair("txcount",       (int)pwalletMain->mapWallet.size()));
+    obj.push_back(Pair("keypoololdest", (boost::int64_t)pwalletMain->GetOldestKeyPoolTime()));
+    obj.push_back(Pair("keypoolsize",   (int)pwalletMain->GetKeyPoolSize()));
+    if (pwalletMain->IsCrypted())
+        obj.push_back(Pair("unlocked_until", (boost::int64_t)nWalletUnlockTime));
+    obj.push_back(Pair("paytxfee",      ValueFromAmount(nTransactionFee)));
+    return obj;
+}

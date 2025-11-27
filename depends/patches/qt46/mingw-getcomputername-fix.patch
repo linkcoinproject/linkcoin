@@ -1,0 +1,10 @@
+--- old/qmake/project.cpp	2010-02-11 15:50:08.000000000 +0000
++++ new/qmake/project.cpp	2024-11-25 21:40:00.000000000 +0000
+@@ -1,6 +1,6 @@
+ #if defined(Q_OS_WIN32)
+         wchar_t name[1024];
+         DWORD size = sizeof(name) / sizeof(wchar_t);
+-        if (GetComputerName(name, &size))
++        if (GetComputerNameW(name, &size))
+             ret = QString::fromWCharArray(name).toLower();
+ #endif
