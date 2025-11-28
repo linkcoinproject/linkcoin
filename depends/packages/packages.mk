@@ -8,7 +8,7 @@ qt46_linux_packages = qt48 expat dbus libxcb xcb_proto libXau xproto freetype fo
 qt5_linux_packages= qt5 expat dbus libxcb xcb_proto libXau xproto freetype fontconfig libX11 xextproto libXext xtrans
 
 qt_darwin_packages=qt
-qt_mingw32_packages=qt
+qt_mingw32_packages=qt48
 
 qt_linux_$(USE_LINUX_STATIC_QT5):=$(qt5_linux_packages)
 qt_linux_:=$(qt46_linux_packages)

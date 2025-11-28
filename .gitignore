@@ -36,7 +36,7 @@ src/leveldb/libleveldb.a
 src/leveldb/libmemenv.a
 
 # Qt generated files
-Makefile
+#Makefile
 Makefile.Release
 Makefile.Debug
 Makefile.test

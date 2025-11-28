@@ -267,6 +267,7 @@ build_qt() {
     if [ "$PLATFORM" = "windows" ]; then
         BOOST_SUFFIX="-mt-s"
         export QMAKESPEC="$DEPENDS_PREFIX/mkspecs/win32-g++"
+        export QMAKE_RANLIB="x86_64-w64-mingw32-ranlib"
     else
         BOOST_SUFFIX="-mt"
         export QMAKESPEC="$DEPENDS_PREFIX/mkspecs/linux-g++-64"
@@ -287,10 +288,18 @@ build_qt() {
         MINIUPNPC_LIB_PATH="$DEPENDS_PREFIX/lib" \
         QRENCODE_INCLUDE_PATH="$DEPENDS_PREFIX/include" \
         QRENCODE_LIB_PATH="$DEPENDS_PREFIX/lib" \
+        QMAKE_RANLIB="$QMAKE_RANLIB" \
         bitcoin-qt.pro
     
     # Build
     echo "Building..."
+    
+    # Fix GDI32 linking issue: add -lgdi32 immediately after -lcrypto in the Makefile
+    if [ "$PLATFORM" = "windows" ]; then
+        echo "Patching Makefile to fix GDI32 link order..."
+        sed -i 's/-lcrypto /-lcrypto -lgdi32 /g' Makefile.Release
+    fi
+    
     make -j$NUM_CORES
     
     echo ""
