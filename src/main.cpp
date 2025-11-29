@@ -77,6 +77,14 @@ int64 nHPSTimerStart = 0;
 int64 nTransactionFee = 0;
 int64 nMinimumInputValue = DUST_HARD_LIMIT;
 
+/** Maximum reorganization depth allowed (in blocks) */
+static const int MAX_REORG_DEPTH = COINBASE_MATURITY; // 120 blocks
+
+/** Minimum cumulative chain work required to consider a chain valid */
+// Using SetHex for compatibility with Bitcoin 0.9.x
+uint256 nMinimumChainWork;
+static bool fMinimumChainWorkInitialized = false;
+
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -1972,6 +1980,15 @@ bool SetBestChain(CValidationState &state, CBlockIndex* pindexNew)
         vConnect.push_back(pindex);
     reverse(vConnect.begin(), vConnect.end());
 
+    // Check reorganization depth limit
+    int reorgDepth = vDisconnect.size();
+    int maxReorgDepth = GetArg("-maxreorgdepth", MAX_REORG_DEPTH);
+    
+    if (maxReorgDepth > 0 && reorgDepth > maxReorgDepth) {
+        return state.DoS(10, error("SetBestChain(): reorganization depth %d exceeds maximum %d blocks",
+                                    reorgDepth, maxReorgDepth));
+    }
+
     if (vDisconnect.size() > 0) {
         printf("REORGANIZE: Disconnect %"PRIszu" blocks; %s..\n", vDisconnect.size(), pfork->GetBlockHash().ToString().c_str());
         printf("REORGANIZE: Connect %"PRIszu" blocks; ..%s\n", vConnect.size(), pindexNew->GetBlockHash().ToString().c_str());
@@ -2326,6 +2343,20 @@ bool CBlock::CheckBlock(CValidationState &state, bool fCheckPOW, bool fCheckMerk
     if (uniqueTx.size() != vtx.size())
         return state.DoS(100, error("CheckBlock() : duplicate transaction"), true);
 
+    set<COutPoint> vInputs;
+    BOOST_FOREACH(const CTransaction& tx, vtx)
+    {
+        if (!tx.IsCoinBase())
+        {
+            BOOST_FOREACH(const CTxIn& txin, tx.vin)
+            {
+                if (vInputs.count(txin.prevout))
+                    return state.DoS(100, error("CheckBlock() : duplicate input"));
+                vInputs.insert(txin.prevout);
+            }
+        }
+    }
+
     unsigned int nSigOps = 0;
     BOOST_FOREACH(const CTransaction& tx, vtx)
     {
@@ -2379,6 +2410,14 @@ bool CBlock::AcceptBlock(CValidationState &state, CDiskBlockPos *dbp)
         CBlockIndex* pcheckpoint = Checkpoints::GetLastCheckpoint(mapBlockIndex);
         if (pcheckpoint && nHeight < pcheckpoint->nHeight)
             return state.DoS(100, error("AcceptBlock() : forked chain older than last checkpoint (height %d)", nHeight));
+
+        // Reject blocks with insufficient cumulative work (eclipse attack protection)
+        if (!IsInitialBlockDownload()) {
+            // In Bitcoin 0.9.x, just check if prev block's chain work meets minimum
+            // This is a simplified check compared to newer versions
+            if (pindexPrev->nChainWork < nMinimumChainWork)
+                return state.Invalid(error("AcceptBlock() : insufficient cumulative chain work"));
+        }
 
         // Reject block.nVersion=1 blocks when 95% (75% on testnet) of the network has upgraded:
         if (nVersion < 2)
@@ -2922,6 +2961,12 @@ bool LoadBlockIndex()
         pchMessageStart[2] = 0xb7;
         pchMessageStart[3] = 0xdc;
         hashGenesisBlock = uint256("0x08303e4552b32f1451c7a187f3ba0bb6d8d85ebce6e1645587f5408a64877d1f");
+    }
+
+    // Initialize minimum chain work (once)
+    if (!fMinimumChainWorkInitialized) {
+        nMinimumChainWork.SetHex("0x0000000000000000000000000000000000000000000000000000000000100000");
+        fMinimumChainWorkInitialized = true;
     }
 
     //

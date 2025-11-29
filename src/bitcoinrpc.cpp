@@ -238,6 +238,7 @@ static const CRPCCommand vRPCCommands[] =
     { "createmultisig",         &createmultisig,         true,      true ,      false },
     { "getrawmempool",          &getrawmempool,          true,      false,      false },
     { "getblock",               &getblock,               false,     false,      false },
+    { "getblockheader",         &getblockheader,         false,     false,      false },
     { "getblockhash",           &getblockhash,           false,     false,      false },
     { "gettransaction",         &gettransaction,         false,     false,      true },
     { "listtransactions",       &listtransactions,       false,     false,      true },
