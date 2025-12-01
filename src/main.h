@@ -162,6 +162,22 @@ void ThreadScriptCheck();
 /** Run the miner threads */
 void GenerateBitcoins(bool fGenerate, CWallet* pwallet);
 /** Generate a new block, without valid proof-of-work */
+/** Generate a new block, without valid proof-of-work */
+class BlockAssembler
+{
+public:
+    BlockAssembler();
+    CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn);
+    
+private:
+    // Configuration
+    unsigned int nBlockMaxSize;
+    unsigned int nBlockPrioritySize;
+    unsigned int nBlockMinSize;
+
+    // Internal methods can be added here as we refactor further
+};
+
 CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn);
 CBlockTemplate* CreateNewBlockWithKey(CReserveKey& reservekey);
 /** Modify the extranonce in a block */
@@ -453,7 +469,7 @@ public:
 
     std::string ToString() const
     {
-        return strprintf("CTxOut(nValue=%"PRI64d".%08"PRI64d", scriptPubKey=%s)", nValue / COIN, nValue % COIN, scriptPubKey.ToString().substr(0,30).c_str());
+        return strprintf("CTxOut(nValue=%" PRI64d".%08" PRI64d", scriptPubKey=%s)", nValue / COIN, nValue % COIN, scriptPubKey.ToString().substr(0,30).c_str());
     }
 
     void print() const

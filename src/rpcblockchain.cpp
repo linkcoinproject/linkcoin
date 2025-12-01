@@ -62,7 +62,13 @@ Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex)
     result.push_back(Pair("time", (boost::int64_t)block.GetBlockTime()));
     result.push_back(Pair("nonce", (boost::uint64_t)block.nNonce));
     result.push_back(Pair("bits", HexBits(block.nBits)));
+    result.push_back(Pair("bits", HexBits(block.nBits)));
     result.push_back(Pair("difficulty", GetDifficulty(blockindex)));
+    result.push_back(Pair("chainwork", blockindex->nChainWork.GetHex()));
+    result.push_back(Pair("nTx", (int)block.vtx.size()));
+    result.push_back(Pair("versionHex", strprintf("%08x", block.nVersion)));
+    result.push_back(Pair("mediantime", (boost::int64_t)blockindex->GetMedianTimePast()));
+    result.push_back(Pair("weight", (int)::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION) * 4));
 
     if (blockindex->pprev)
         result.push_back(Pair("previousblockhash", blockindex->pprev->GetBlockHash().GetHex()));
@@ -121,19 +127,129 @@ Value settxfee(const Array& params, bool fHelp)
 
 Value getrawmempool(const Array& params, bool fHelp)
 {
-    if (fHelp || params.size() != 0)
+    if (fHelp || params.size() > 1)
         throw runtime_error(
-            "getrawmempool\n"
-            "Returns all transaction ids in memory pool.");
+            "getrawmempool ( verbose )\n"
+            "Returns all transaction ids in memory pool.\n"
+            "\nArguments:\n"
+            "1. verbose           (boolean, optional, default=false) true for a json object, false for array of transaction ids\n"
+            "\nResult: (for verbose=false):\n"
+            "[                     (json array of string)\n"
+            "  \"transactionid\"     (string) The transaction id\n"
+            "  ,...\n"
+            "]\n"
+            "\nResult: (for verbose=true):\n"
+            "{                     (json object)\n"
+            "  \"transactionid\" : {       (json object)\n"
+            "    \"size\" : n,             (numeric) transaction size in bytes\n"
+            "    \"fee\" : n,              (numeric) transaction fee in bitcoins\n"
+            "    \"time\" : n,             (numeric) local time transaction entered pool in seconds since 1 Jan 1970 GMT\n"
+            "    \"height\" : n,           (numeric) block height when transaction entered pool\n"
+            "    \"startingpriority\" : n, (numeric) priority when transaction entered pool\n"
+            "    \"currentpriority\" : n,  (numeric) transaction priority now\n"
+            "    \"depends\" : [           (array) unconfirmed transactions used as inputs for this transaction\n"
+            "        \"transactionid\",    (string) parent transaction id\n"
+            "       ... ]\n"
+            "  }, ...\n"
+            "}\n"
+            "\nExamples\n"
+            "> linkcoin-cli getrawmempool true\n"
+            "> curl --user myusername --data-binary '{\"jsonrpc\": \"1.0\", \"id\":\"curltest\", \"method\": \"getrawmempool\", \"params\": [true] }' -H 'content-type: text/plain;' http://127.0.0.1:9600/\n"
+        );
 
-    vector<uint256> vtxid;
-    mempool.queryHashes(vtxid);
+    bool fVerbose = false;
+    if (params.size() > 0)
+        fVerbose = params[0].get_bool();
 
-    Array a;
-    BOOST_FOREACH(const uint256& hash, vtxid)
-        a.push_back(hash.ToString());
+    if (fVerbose)
+    {
+        LOCK(mempool.cs);
+        Object o;
+        BOOST_FOREACH(const PAIRTYPE(uint256, CTransaction)& entry, mempool.mapTx)
+        {
+            const uint256& hash = entry.first;
+            const CTransaction& tx = entry.second;
+            Object info;
+            info.push_back(Pair("size", (int)::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION)));
+            info.push_back(Pair("fee", ValueFromAmount(0))); 
+            info.push_back(Pair("time", (boost::int64_t)GetTime())); 
+            info.push_back(Pair("height", (int)nBestHeight));
+            info.push_back(Pair("startingpriority", 0.0));
+            info.push_back(Pair("currentpriority", 0.0));
+            
+            Array depends;
+            BOOST_FOREACH(const CTxIn& txin, tx.vin)
+            {
+                if (mempool.exists(txin.prevout.hash))
+                    depends.push_back(txin.prevout.hash.ToString());
+            }
+            info.push_back(Pair("depends", depends));
+            o.push_back(Pair(hash.ToString(), info));
+        }
+        return o;
+    }
+    else
+    {
+        vector<uint256> vtxid;
+        mempool.queryHashes(vtxid);
 
-    return a;
+        Array a;
+        BOOST_FOREACH(const uint256& hash, vtxid)
+            a.push_back(hash.ToString());
+
+        return a;
+    }
+}
+
+Value getmempoolentry(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "getmempoolentry \"txid\"\n"
+            "\nReturns mempool data for given transaction\n"
+            "\nArguments:\n"
+            "1. \"txid\"                   (string, required) The transaction id (must be in mempool)\n"
+            "\nResult:\n"
+            "{                           (json object)\n"
+            "    \"size\" : n,             (numeric) transaction size in bytes\n"
+            "    \"fee\" : n,              (numeric) transaction fee in bitcoins\n"
+            "    \"time\" : n,             (numeric) local time transaction entered pool in seconds since 1 Jan 1970 GMT\n"
+            "    \"height\" : n,           (numeric) block height when transaction entered pool\n"
+            "    \"startingpriority\" : n, (numeric) priority when transaction entered pool\n"
+            "    \"currentpriority\" : n,  (numeric) transaction priority now\n"
+            "    \"depends\" : [           (array) unconfirmed transactions used as inputs for this transaction\n"
+            "        \"transactionid\",    (string) parent transaction id\n"
+            "       ... ]\n"
+            "}\n"
+            "\nExamples\n"
+            "> linkcoin-cli getmempoolentry \"mytxid\"\n"
+            "> curl --user myusername --data-binary '{\"jsonrpc\": \"1.0\", \"id\":\"curltest\", \"method\": \"getmempoolentry\", \"params\": [\"mytxid\"] }' -H 'content-type: text/plain;' http://127.0.0.1:9600/\n"
+        );
+
+    string strHash = params[0].get_str();
+    uint256 hash(strHash);
+
+    LOCK(mempool.cs);
+    if (!mempool.exists(hash))
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Transaction not in mempool");
+
+    const CTransaction& tx = mempool.lookup(hash);
+    Object info;
+    info.push_back(Pair("size", (int)::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION)));
+    info.push_back(Pair("fee", ValueFromAmount(0))); 
+    info.push_back(Pair("time", (boost::int64_t)GetTime())); 
+    info.push_back(Pair("height", (int)nBestHeight));
+    info.push_back(Pair("startingpriority", 0.0));
+    info.push_back(Pair("currentpriority", 0.0));
+
+    Array depends;
+    BOOST_FOREACH(const CTxIn& txin, tx.vin)
+    {
+        if (mempool.exists(txin.prevout.hash))
+            depends.push_back(txin.prevout.hash.ToString());
+    }
+    info.push_back(Pair("depends", depends));
+    return info;
 }
 
 Value getblockhash(const Array& params, bool fHelp)
@@ -246,6 +362,9 @@ Value getblockheader(const Array& params, bool fHelp)
     result.push_back(Pair("nonce", (boost::uint64_t)pblockindex->nNonce));
     result.push_back(Pair("bits", HexBits(pblockindex->nBits)));
     result.push_back(Pair("difficulty", GetDifficulty(pblockindex)));
+    result.push_back(Pair("chainwork", pblockindex->nChainWork.GetHex()));
+    result.push_back(Pair("nTx", (int)pblockindex->nTx));
+    result.push_back(Pair("mediantime", (boost::int64_t)pblockindex->GetMedianTimePast()));
 
     if (pblockindex->pprev)
         result.push_back(Pair("previousblockhash", pblockindex->pprev->GetBlockHash().GetHex()));
@@ -369,6 +488,9 @@ Value getblockchaininfo(const Array& params, bool fHelp)
     obj.push_back(Pair("difficulty",      (double)GetDifficulty()));
     obj.push_back(Pair("verificationprogress", Checkpoints::GuessVerificationProgress(pindexBest)));
     obj.push_back(Pair("chainwork",       pindexBest->nChainWork.GetHex()));
+    obj.push_back(Pair("pruned",          false));
+    obj.push_back(Pair("softforks",       Array()));
+    obj.push_back(Pair("bip9_softforks",  Object()));
     return obj;
 }
 

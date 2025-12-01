@@ -215,5 +215,7 @@ extern json_spirit::Value getwalletinfo(const json_spirit::Array& params, bool f
 extern json_spirit::Value getmempoolinfo(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value getnetworkstats(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value getchaintxstats(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value getmempoolentry(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value estimatesmartfee(const json_spirit::Array& params, bool fHelp);
 
 #endif

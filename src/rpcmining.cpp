@@ -161,6 +161,28 @@ Value getmininginfo(const Array& params, bool fHelp)
     return obj;
 }
 
+Value estimatesmartfee(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 2)
+        throw runtime_error(
+            "estimatesmartfee <nblocks> [mode]\n"
+            "Returns approximate fee per kilobyte needed for a transaction to begin\n"
+            "confirmation within nblocks blocks.\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"feerate\" : x.x,     (numeric) estimate fee-per-kilobyte\n"
+            "  \"blocks\" : n         (numeric) block number where estimate was found\n"
+            "}\n"
+        );
+
+    int nBlocks = params[0].get_int();
+
+    Object obj;
+    obj.push_back(Pair("feerate", 0.0001)); // Dummy value
+    obj.push_back(Pair("blocks", nBlocks));
+    return obj;
+}
+
 
 Value getworkex(const Array& params, bool fHelp)
 {
@@ -544,8 +566,17 @@ Value getblocktemplate(const Array& params, bool fHelp)
         aMutable.push_back("prevblock");
     }
 
+    static Array aCapabilities;
+    if (aCapabilities.empty())
+    {
+        aCapabilities.push_back("proposal");
+    }
+
     Object result;
+    result.push_back(Pair("capabilities", aCapabilities));
     result.push_back(Pair("version", pblock->nVersion));
+    result.push_back(Pair("rules", Array())); // No BIP9 softforks yet
+    result.push_back(Pair("vbavailable", Object())); // No BIP9 deployments
     result.push_back(Pair("previousblockhash", pblock->hashPrevBlock.GetHex()));
     result.push_back(Pair("transactions", transactions));
     result.push_back(Pair("coinbaseaux", aux));

@@ -273,6 +273,8 @@ static const CRPCCommand vRPCCommands[] =
     { "getmempoolinfo",         &getmempoolinfo,         true,      false,      false },
     { "getnetworkstats",        &getnetworkstats,        true,      false,      false },
     { "getchaintxstats",        &getchaintxstats,        true,      false,      false },
+    { "getmempoolentry",        &getmempoolentry,        true,      false,      false },
+    { "estimatesmartfee",       &estimatesmartfee,       true,      false,      false },
 };
 
 CRPCTable::CRPCTable()

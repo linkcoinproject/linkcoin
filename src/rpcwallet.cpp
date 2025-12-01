@@ -1534,8 +1534,17 @@ Value validateaddress(const Array& params, bool fHelp)
         CTxDestination dest = address.Get();
         string currentAddress = address.ToString();
         ret.push_back(Pair("address", currentAddress));
+        
+        CScript scriptPubKey;
+        scriptPubKey.SetDestination(dest);
+        ret.push_back(Pair("scriptPubKey", HexStr(scriptPubKey.begin(), scriptPubKey.end())));
+
         bool fMine = pwalletMain ? IsMine(*pwalletMain, dest) : false;
         ret.push_back(Pair("ismine", fMine));
+        ret.push_back(Pair("iswitness", false)); // Dummy
+        ret.push_back(Pair("iswatchonly", false)); // Dummy
+        ret.push_back(Pair("isscript", false)); // Default, overridden by visitor if true
+
         if (fMine) {
             Object detail = boost::apply_visitor(DescribeAddressVisitor(), dest);
             ret.insert(ret.end(), detail.begin(), detail.end());
@@ -1643,14 +1652,20 @@ Value getwalletinfo(const Array& params, bool fHelp)
 
     Object obj;
     obj.push_back(Pair("walletversion", pwalletMain->GetVersion()));
+    obj.push_back(Pair("walletname",    "")); // Dummy
+    obj.push_back(Pair("format",        "bdb")); // Dummy
     obj.push_back(Pair("balance",       ValueFromAmount(pwalletMain->GetBalance())));
     obj.push_back(Pair("unconfirmed_balance", ValueFromAmount(pwalletMain->GetUnconfirmedBalance())));
     obj.push_back(Pair("immature_balance", ValueFromAmount(pwalletMain->GetImmatureBalance())));
     obj.push_back(Pair("txcount",       (int)pwalletMain->mapWallet.size()));
     obj.push_back(Pair("keypoololdest", (boost::int64_t)pwalletMain->GetOldestKeyPoolTime()));
     obj.push_back(Pair("keypoolsize",   (int)pwalletMain->GetKeyPoolSize()));
+    obj.push_back(Pair("keypoolsize_hd_internal", 0)); // Dummy
     if (pwalletMain->IsCrypted())
         obj.push_back(Pair("unlocked_until", (boost::int64_t)nWalletUnlockTime));
     obj.push_back(Pair("paytxfee",      ValueFromAmount(nTransactionFee)));
+    obj.push_back(Pair("private_keys_enabled", true)); // Dummy
+    obj.push_back(Pair("avoid_reuse",   false)); // Dummy
+    obj.push_back(Pair("scanning",      false)); // Dummy
     return obj;
 }

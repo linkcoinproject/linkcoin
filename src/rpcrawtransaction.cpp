@@ -78,7 +78,11 @@ void ScriptPubKeyToJSON(const CScript& scriptPubKey, Object& out)
 void TxToJSON(const CTransaction& tx, const uint256 hashBlock, Object& entry)
 {
     entry.push_back(Pair("txid", tx.GetHash().GetHex()));
+    entry.push_back(Pair("hash", tx.GetHash().GetHex())); // Same as txid for non-segwit
     entry.push_back(Pair("version", tx.nVersion));
+    entry.push_back(Pair("size", (int)::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION)));
+    entry.push_back(Pair("vsize", (int)::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION))); // Same as size for non-segwit
+    entry.push_back(Pair("weight", (int)::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION) * 4)); // size * 4
     entry.push_back(Pair("locktime", (boost::int64_t)tx.nLockTime));
     Array vin;
     BOOST_FOREACH(const CTxIn& txin, tx.vin)

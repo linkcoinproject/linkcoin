@@ -200,6 +200,14 @@ public:
     CCriticalSection cs_filter;
     CBloomFilter* pfilter;
     int nRefCount;
+
+    // P2P Eviction Fields
+    uint64 nKeyedNetGroup;
+    int64 nMinPingTime;
+    int64 nLastBlockTime;
+    int64 nLastTXTime;
+    bool fPreferEvict;
+
 protected:
 
     // Denial-of-service detection/prevention
@@ -262,6 +270,12 @@ public:
         fRelayTxes = false;
         setInventoryKnown.max_size(SendBufferSize() / 1000);
         pfilter = new CBloomFilter();
+
+        nKeyedNetGroup = 0;
+        nMinPingTime = std::numeric_limits<int64_t>::max();
+        nLastBlockTime = 0;
+        nLastTXTime = 0;
+        fPreferEvict = false;
 
         // Be shy and don't send version until we hear
         if (hSocket != INVALID_SOCKET && !fInbound)

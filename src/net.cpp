@@ -752,6 +752,159 @@ void SocketSendData(CNode *pnode)
     pnode->vSendMsg.erase(pnode->vSendMsg.begin(), it);
 }
 
+// P2P Eviction Logic
+struct NodeEvictionCandidate
+{
+    int64 nTimeConnected;
+    int64 nMinPingTime;
+    int64 nLastBlockTime;
+    int64 nLastTXTime;
+    bool fRelevantServices;
+    bool fRelayTxes;
+    bool fBloomFilter;
+    uint64 nKeyedNetGroup;
+    bool fPreferEvict;
+    bool fLocal;
+    CNode* node;
+};
+
+static bool ReverseCompareNodeMinPingTime(const NodeEvictionCandidate &a, const NodeEvictionCandidate &b)
+{
+    return a.nMinPingTime > b.nMinPingTime;
+}
+
+static bool CompareNetGroupKeyed(const NodeEvictionCandidate &a, const NodeEvictionCandidate &b)
+{
+    return a.nKeyedNetGroup < b.nKeyedNetGroup;
+}
+
+static bool CompareNodeBlockTime(const NodeEvictionCandidate &a, const NodeEvictionCandidate &b)
+{
+    if (a.nLastBlockTime != b.nLastBlockTime) return a.nLastBlockTime < b.nLastBlockTime;
+    if (a.fRelevantServices != b.fRelevantServices) return b.fRelevantServices;
+    return a.nTimeConnected > b.nTimeConnected;
+}
+
+static bool CompareNodeTXTime(const NodeEvictionCandidate &a, const NodeEvictionCandidate &b)
+{
+    if (a.nLastTXTime != b.nLastTXTime) return a.nLastTXTime < b.nLastTXTime;
+    if (a.fRelayTxes != b.fRelayTxes) return b.fRelayTxes;
+    if (a.fBloomFilter != b.fBloomFilter) return a.fBloomFilter;
+    return a.nTimeConnected > b.nTimeConnected;
+}
+
+static void EraseLastKElements(std::vector<NodeEvictionCandidate>& elements, bool (*comparator)(const NodeEvictionCandidate&, const NodeEvictionCandidate&), size_t k)
+{
+    std::sort(elements.begin(), elements.end(), comparator);
+    if (k > elements.size()) k = elements.size();
+    elements.erase(elements.end() - k, elements.end());
+}
+
+static CNode* SelectNodeToEvict(std::vector<NodeEvictionCandidate>& vEvictionCandidates)
+{
+    // Protect connections with certain characteristics
+
+    // Deterministically select 4 peers to protect by netgroup.
+    EraseLastKElements(vEvictionCandidates, CompareNetGroupKeyed, 4);
+    // Protect the 8 nodes with the lowest minimum ping time.
+    EraseLastKElements(vEvictionCandidates, ReverseCompareNodeMinPingTime, 8);
+    // Protect 4 nodes that most recently sent us novel transactions accepted into our mempool.
+    EraseLastKElements(vEvictionCandidates, CompareNodeTXTime, 4);
+    // Protect 4 nodes that most recently sent us novel blocks.
+    EraseLastKElements(vEvictionCandidates, CompareNodeBlockTime, 4);
+
+    if (vEvictionCandidates.empty()) return NULL;
+
+    // If any remaining peers are preferred for eviction consider only them.
+    bool fAnyPreferred = false;
+    for (size_t i = 0; i < vEvictionCandidates.size(); i++) {
+        if (vEvictionCandidates[i].fPreferEvict) {
+            fAnyPreferred = true;
+            break;
+        }
+    }
+    if (fAnyPreferred) {
+        for (std::vector<NodeEvictionCandidate>::iterator it = vEvictionCandidates.begin(); it != vEvictionCandidates.end(); ) {
+            if (!it->fPreferEvict) {
+                it = vEvictionCandidates.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    // Identify the network group with the most connections and youngest member.
+    uint64 naMostConnections;
+    unsigned int nMostConnections = 0;
+    int64 nMostConnectionsTime = 0;
+    std::map<uint64, std::vector<NodeEvictionCandidate> > mapNetGroupNodes;
+    
+    for (size_t i = 0; i < vEvictionCandidates.size(); i++) {
+        mapNetGroupNodes[vEvictionCandidates[i].nKeyedNetGroup].push_back(vEvictionCandidates[i]);
+    }
+    
+    for (std::map<uint64, std::vector<NodeEvictionCandidate> >::iterator it = mapNetGroupNodes.begin(); it != mapNetGroupNodes.end(); ++it) {
+        std::vector<NodeEvictionCandidate> &group = it->second;
+        int64 grouptime = group[0].nTimeConnected; 
+        for (size_t k = 1; k < group.size(); k++) {
+             if (group[k].nTimeConnected > grouptime) grouptime = group[k].nTimeConnected;
+        }
+
+        if (group.size() > nMostConnections || (group.size() == nMostConnections && grouptime > nMostConnectionsTime)) {
+            nMostConnections = group.size();
+            nMostConnectionsTime = grouptime;
+            naMostConnections = it->first;
+        }
+    }
+
+    // Reduce to the network group with the most connections
+    vEvictionCandidates = mapNetGroupNodes[naMostConnections];
+
+    // Disconnect from the network group with the most connections
+    CNode* pnodeEvict = NULL;
+    int64 nMaxTime = 0; 
+    for (size_t i = 0; i < vEvictionCandidates.size(); i++) {
+        if (vEvictionCandidates[i].nTimeConnected > nMaxTime) {
+            nMaxTime = vEvictionCandidates[i].nTimeConnected;
+            pnodeEvict = vEvictionCandidates[i].node;
+        }
+    }
+    
+    return pnodeEvict;
+}
+
+static bool AttemptToEvictConnection()
+{
+    std::vector<NodeEvictionCandidate> vEvictionCandidates;
+    {
+        LOCK(cs_vNodes);
+        BOOST_FOREACH(CNode* pnode, vNodes) {
+            if (pnode->fInbound) {
+                NodeEvictionCandidate candidate;
+                candidate.nTimeConnected = pnode->nTimeConnected;
+                candidate.nMinPingTime = pnode->nMinPingTime;
+                candidate.nLastBlockTime = pnode->nLastBlockTime;
+                candidate.nLastTXTime = pnode->nLastTXTime;
+                candidate.fRelevantServices = false; 
+                candidate.fRelayTxes = pnode->fRelayTxes;
+                candidate.fBloomFilter = (pnode->pfilter != NULL);
+                candidate.nKeyedNetGroup = pnode->nKeyedNetGroup;
+                candidate.fPreferEvict = pnode->fPreferEvict;
+                candidate.fLocal = false; 
+                candidate.node = pnode;
+                vEvictionCandidates.push_back(candidate);
+            }
+        }
+    }
+
+    CNode* pnodeToEvict = SelectNodeToEvict(vEvictionCandidates);
+    if (pnodeToEvict) {
+        pnodeToEvict->fDisconnect = true;
+        return true;
+    }
+    return false;
+}
+
 static list<CNode*> vNodesDisconnected;
 
 void ThreadSocketHandler()
@@ -941,10 +1094,21 @@ void ThreadSocketHandler()
             }
             else if (nInbound >= nMaxConnections - MAX_OUTBOUND_CONNECTIONS)
             {
+                if (!AttemptToEvictConnection())
                 {
                     LOCK(cs_setservAddNodeAddresses);
                     if (!setservAddNodeAddresses.count(addr))
                         closesocket(hSocket);
+                }
+                else
+                {
+                    printf("accepted connection %s\n", addr.ToString().c_str());
+                    CNode* pnode = new CNode(hSocket, addr, "", true);
+                    pnode->AddRef();
+                    {
+                        LOCK(cs_vNodes);
+                        vNodes.push_back(pnode);
+                    }
                 }
             }
             else if (CNode::IsBanned(addr))
@@ -1269,7 +1433,7 @@ void DumpAddresses()
     CAddrDB adb;
     adb.Write(addrman);
 
-    printf("Flushed %d addresses to peers.dat  %"PRI64d"ms\n",
+    printf("Flushed %d addresses to peers.dat  %" PRI64d"ms\n",
            addrman.size(), GetTimeMillis() - nStart);
 }
 
