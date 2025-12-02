@@ -1291,6 +1291,72 @@ unsigned int static DigiShield(const CBlockIndex* pindexLast, const CBlockHeader
     return bnNew.GetCompact();
 }
 
+// Elastic Exponential Difficulty (EED)
+// Based on ASERT algorithm
+static const int64 nEEDHeight = 5000;
+static const int64 nEEDHalflife = 172800;
+
+CBigNum ApplyExponentialAdjustment(CBigNum target, int64 nDrift, int64 nHalflife) {
+    // Fixed point calculation: ln(2) * 65536 = 45426
+    int64 nCorrection = (nDrift * 45426) / nHalflife;
+    
+    CBigNum bnCorrection;
+    
+    if (nCorrection >= 0) {
+        bnCorrection.setint64(nCorrection);
+        CBigNum adjustment = target * bnCorrection;
+        adjustment /= 65536;
+        target += adjustment;
+    } else {
+        bnCorrection.setint64(-nCorrection);
+        CBigNum adjustment = target * bnCorrection;
+        adjustment /= 65536;
+        target -= adjustment;
+    }
+    
+    return target;
+}
+
+unsigned int ElasticExponentialDifficulty(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
+{
+    // 1. Basic Checks
+    if (pindexLast == NULL) return bnProofOfWorkLimit.GetCompact();
+    
+    int64 nHalflife = nEEDHalflife;
+    
+    // 3. Calculate Solvetime & Drift
+    const CBlockIndex* pindexPrevPrev = pindexLast->pprev;
+    if (pindexPrevPrev == NULL) return bnProofOfWorkLimit.GetCompact();
+    
+    int64 nSolvetime = pindexLast->GetBlockTime() - pindexPrevPrev->GetBlockTime();
+    
+    // Prevent negative solvetime
+    if (nSolvetime < 1) nSolvetime = 1;
+    
+    int64 nDrift = nSolvetime - nTargetSpacing;
+    
+    // 4. ELASTIC ENHANCEMENT
+    bool fStress = false;
+    if (nSolvetime > nTargetSpacing * 4) fStress = true;
+    if (nSolvetime < nTargetSpacing / 4) fStress = true;
+    
+    if (fStress) {
+        nHalflife /= 4; 
+    }
+    
+    // 5. Apply Adjustment
+    CBigNum bnNew;
+    bnNew.SetCompact(pindexLast->nBits);
+    
+    bnNew = ApplyExponentialAdjustment(bnNew, nDrift, nHalflife);
+    
+    // 6. Limits
+    if (bnNew > bnProofOfWorkLimit) bnNew = bnProofOfWorkLimit;
+    if (bnNew == 0) bnNew = 1;
+
+    return bnNew.GetCompact();
+}
+
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
 {
     unsigned int nProofOfWorkLimit = bnProofOfWorkLimit.GetCompact();
@@ -1298,6 +1364,12 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
     // Genesis block
     if (pindexLast == NULL)
         return nProofOfWorkLimit;
+
+    // Elastic Exponential Difficulty (EED)
+    if (pindexLast->nHeight + 1 >= nEEDHeight)
+    {
+        return ElasticExponentialDifficulty(pindexLast, pblock);
+    }
 
     // Classic2 Adaptive Difficulty (Block 2500+)
     if (pindexLast->nHeight + 1 >= nClassic2Height)
