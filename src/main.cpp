@@ -1293,9 +1293,12 @@ unsigned int static DigiShield(const CBlockIndex* pindexLast, const CBlockHeader
 
 // Elastic Exponential Difficulty (EED)
 // Based on ASERT algorithm
-static const int64 nEEDHeight = 5000;
+static const int64 nEEDHeight = 5000;      // Buggy version activation
+static const int64 nEEDFixHeight = 5300;   // Fixed version activation (hardfork)
 static const int64 nEEDHalflife = 172800;
 
+// BUGGY VERSION - kept for backward compatibility (blocks 5000-5299)
+// This incorrectly uses addition/subtraction instead of multiplication
 CBigNum ApplyExponentialAdjustment(CBigNum target, int64 nDrift, int64 nHalflife) {
     // Fixed point calculation: ln(2) * 65536 = 45426
     int64 nCorrection = (nDrift * 45426) / nHalflife;
@@ -1306,17 +1309,66 @@ CBigNum ApplyExponentialAdjustment(CBigNum target, int64 nDrift, int64 nHalflife
         bnCorrection.setint64(nCorrection);
         CBigNum adjustment = target * bnCorrection;
         adjustment /= 65536;
-        target += adjustment;
+        target += adjustment;  // BUG: should multiply, not add
     } else {
         bnCorrection.setint64(-nCorrection);
         CBigNum adjustment = target * bnCorrection;
         adjustment /= 65536;
-        target -= adjustment;
+        target -= adjustment;  // BUG: should multiply, not subtract
     }
     
     return target;
 }
 
+// FIXED VERSION - proper exponential adjustment using multiplication
+// Implements: target_new = target_old * 2^(drift / halflife)
+CBigNum ApplyExponentialAdjustmentFixed(CBigNum target, int64 nDrift, int64 nHalflife) {
+    // Calculate exponent: drift / halflife
+    // We need to compute 2^(drift/halflife)
+    // Using fixed-point arithmetic with 16-bit fractional precision
+    
+    // Exponent in fixed point (65536 = 2^16)
+    int64 exponent = (nDrift * 65536) / nHalflife;
+    
+    // Separate integer and fractional parts
+    int64 shifts = exponent / 65536;  // Integer part (number of doublings/halvings)
+    int64 frac = exponent % 65536;    // Fractional part
+    if (frac < 0) {
+        shifts -= 1;
+        frac += 65536;
+    }
+    
+    // Apply integer shifts first (exact doublings or halvings)
+    if (shifts >= 0) {
+        // Positive: multiply by 2^shifts
+        // Limit to prevent overflow
+        if (shifts > 16) shifts = 16;
+        for (int i = 0; i < shifts; i++) {
+            target *= 2;
+        }
+    } else {
+        // Negative: divide by 2^(-shifts)
+        int64 neg_shifts = -shifts;
+        if (neg_shifts > 16) neg_shifts = 16;
+        for (int i = 0; i < neg_shifts; i++) {
+            target /= 2;
+        }
+    }
+    
+    // Apply fractional part using linear approximation
+    // 2^x ≈ 1 + x*ln(2) for small x
+    // ln(2) * 65536 = 45426
+    CBigNum fractional_adjustment = target * frac;
+    fractional_adjustment *= 45426;
+    fractional_adjustment /= 65536;
+    fractional_adjustment /= 65536;
+    
+    target += fractional_adjustment;
+    
+    return target;
+}
+
+// BUGGY VERSION - kept for backward compatibility (blocks 5000-5299)
 unsigned int ElasticExponentialDifficulty(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
 {
     // 1. Basic Checks
@@ -1344,11 +1396,52 @@ unsigned int ElasticExponentialDifficulty(const CBlockIndex* pindexLast, const C
         nHalflife /= 4; 
     }
     
-    // 5. Apply Adjustment
+    // 5. Apply Adjustment (BUGGY - uses addition/subtraction)
     CBigNum bnNew;
     bnNew.SetCompact(pindexLast->nBits);
     
     bnNew = ApplyExponentialAdjustment(bnNew, nDrift, nHalflife);
+    
+    // 6. Limits
+    if (bnNew > bnProofOfWorkLimit) bnNew = bnProofOfWorkLimit;
+    if (bnNew == 0) bnNew = 1;
+
+    return bnNew.GetCompact();
+}
+
+// FIXED VERSION - proper exponential difficulty adjustment
+unsigned int ElasticExponentialDifficultyFixed(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
+{
+    // 1. Basic Checks
+    if (pindexLast == NULL) return bnProofOfWorkLimit.GetCompact();
+    
+    int64 nHalflife = nEEDHalflife;
+    
+    // 3. Calculate Solvetime & Drift
+    const CBlockIndex* pindexPrevPrev = pindexLast->pprev;
+    if (pindexPrevPrev == NULL) return bnProofOfWorkLimit.GetCompact();
+    
+    int64 nSolvetime = pindexLast->GetBlockTime() - pindexPrevPrev->GetBlockTime();
+    
+    // Prevent negative solvetime
+    if (nSolvetime < 1) nSolvetime = 1;
+    
+    int64 nDrift = nSolvetime - nTargetSpacing;
+    
+    // 4. ELASTIC ENHANCEMENT
+    bool fStress = false;
+    if (nSolvetime > nTargetSpacing * 4) fStress = true;
+    if (nSolvetime < nTargetSpacing / 4) fStress = true;
+    
+    if (fStress) {
+        nHalflife /= 4; 
+    }
+    
+    // 5. Apply Adjustment (FIXED - uses exponential multiplication)
+    CBigNum bnNew;
+    bnNew.SetCompact(pindexLast->nBits);
+    
+    bnNew = ApplyExponentialAdjustmentFixed(bnNew, nDrift, nHalflife);
     
     // 6. Limits
     if (bnNew > bnProofOfWorkLimit) bnNew = bnProofOfWorkLimit;
@@ -1365,7 +1458,13 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
     if (pindexLast == NULL)
         return nProofOfWorkLimit;
 
-    // Elastic Exponential Difficulty (EED)
+    // Elastic Exponential Difficulty (EED) - Fixed version (block 5300+)
+    if (pindexLast->nHeight + 1 >= nEEDFixHeight)
+    {
+        return ElasticExponentialDifficultyFixed(pindexLast, pblock);
+    }
+
+    // Elastic Exponential Difficulty (EED) - Buggy version (blocks 5000-5299)
     if (pindexLast->nHeight + 1 >= nEEDHeight)
     {
         return ElasticExponentialDifficulty(pindexLast, pblock);
