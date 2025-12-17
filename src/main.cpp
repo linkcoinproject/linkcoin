@@ -1293,66 +1293,370 @@ unsigned int static DigiShield(const CBlockIndex* pindexLast, const CBlockHeader
 
 // Elastic Exponential Difficulty (EED)
 // Based on ASERT algorithm
-static const int64 nEEDHeight = 5000;
-static const int64 nEEDHalflife = 172800;
+static const int64 nEEDHeight = 5000;      // Buggy version activation
+static const int64 nEEDFixHeight = 5300;   // Fixed version activation (hardfork 1)
+static const int64 nEEDV2Height = 5607;    // V2 with proper exponential (hardfork 2)
+static const int64 nEEDHalflife = 172800;  // Original: 48 hours (for V0/V1 compat)
+static const int64 nEEDV2Halflife = 28800; // V2: 8 hours - more responsive to hashrate changes
 
-CBigNum ApplyExponentialAdjustment(CBigNum target, int64 nDrift, int64 nHalflife) {
+// ==== BUGGY VERSION - kept for backward compatibility (blocks 5000-5299) ====
+// This incorrectly uses addition/subtraction instead of multiplication
+CBigNum ApplyExponentialAdjustmentBuggy(CBigNum target, int64 nDrift, int64 nHalflife) {
     // Fixed point calculation: ln(2) * 65536 = 45426
     int64 nCorrection = (nDrift * 45426) / nHalflife;
-    
+
     CBigNum bnCorrection;
-    
+
     if (nCorrection >= 0) {
         bnCorrection.setint64(nCorrection);
         CBigNum adjustment = target * bnCorrection;
         adjustment /= 65536;
-        target += adjustment;
+        target += adjustment;  // BUG: should multiply, not add
     } else {
         bnCorrection.setint64(-nCorrection);
         CBigNum adjustment = target * bnCorrection;
         adjustment /= 65536;
-        target -= adjustment;
+        target -= adjustment;  // BUG: should multiply, not subtract
     }
-    
+
     return target;
 }
 
-unsigned int ElasticExponentialDifficulty(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
+// ==== FIXED VERSION V1 - upstream fix (blocks 5300-5606) ====
+// Uses integer shifts for 2^n and linear approximation for fractional
+CBigNum ApplyExponentialAdjustmentV1(CBigNum target, int64 nDrift, int64 nHalflife) {
+    // Calculate exponent: drift / halflife
+    // Using fixed-point arithmetic with 16-bit fractional precision
+    int64 exponent = (nDrift * 65536) / nHalflife;
+
+    // Separate integer and fractional parts
+    int64 shifts = exponent / 65536;  // Integer part (number of doublings/halvings)
+    int64 frac = exponent % 65536;    // Fractional part
+    if (frac < 0) {
+        shifts -= 1;
+        frac += 65536;
+    }
+
+    // Apply integer shifts first (exact doublings or halvings)
+    if (shifts >= 0) {
+        // Positive: multiply by 2^shifts
+        if (shifts > 16) shifts = 16;
+        for (int i = 0; i < shifts; i++) {
+            target *= 2;
+        }
+    } else {
+        // Negative: divide by 2^(-shifts)
+        int64 neg_shifts = -shifts;
+        if (neg_shifts > 16) neg_shifts = 16;
+        for (int i = 0; i < neg_shifts; i++) {
+            target /= 2;
+        }
+    }
+
+    // Apply fractional part using linear approximation
+    // 2^x ≈ 1 + x*ln(2) for small x
+    // ln(2) * 65536 = 45426
+    CBigNum fractional_adjustment = target * frac;
+    fractional_adjustment *= 45426;
+    fractional_adjustment /= 65536;
+    fractional_adjustment /= 65536;
+
+    target += fractional_adjustment;
+
+    return target;
+}
+
+// ==== FIXED VERSION V2 - proper polynomial exponential (blocks 5607+) ====
+// Uses 6th-degree Taylor polynomial for accurate 2^x calculation
+CBigNum ApplyExponentialAdjustmentV2(CBigNum target, int64 nDrift, int64 nHalflife) {
+    // True exponential calculation: target * 2^(drift/halflife)
+    // Using fixed-point arithmetic with 16 fractional bits
+    
+    // OVERFLOW PROTECTION: Cap drift to prevent overflow in shift operation
+    // Max safe value for (nDrift << 16) in int64: 2^47 / 65536 = ~140 trillion seconds
+    // We cap at 30 days (2592000 seconds) which is more than enough
+    static const int64 nMaxDrift = 2592000;   // 30 days max drift
+    static const int64 nMinDrift = -2592000;  // -30 days min drift
+    
+    if (nDrift > nMaxDrift) nDrift = nMaxDrift;
+    if (nDrift < nMinDrift) nDrift = nMinDrift;
+    
+    // Prevent division by zero
+    if (nHalflife <= 0) nHalflife = 1;
+    
+    // Calculate the exponent: drift/halflife (this is the power of 2)
+    int64 nExponentFixed = (nDrift << 16) / nHalflife;
+    
+    // Separate integer and fractional parts of the exponent
+    int64 nIntegerPart = nExponentFixed >> 16;
+    int64 nFractionalPart = nExponentFixed & 0xFFFF;
+    
+    // Handle negative exponents
+    bool bNegativeExponent = false;
+    if (nExponentFixed < 0) {
+        bNegativeExponent = true;
+        nIntegerPart = (-nExponentFixed) >> 16;
+        nFractionalPart = (-nExponentFixed) & 0xFFFF;
+    }
+    
+    // Limit adjustment to prevent extreme changes
+    // Max 8x easier (nIntegerPart=3) or 8x harder per calculation
+    // This prevents both overflow AND unreachable difficulty spikes
+    if (nIntegerPart > 3) {
+        nIntegerPart = 3;
+        nFractionalPart = 0;
+    }
+    
+    // Calculate 2^(fractional part) using 6th-degree Taylor polynomial
+    // 2^x = 1 + x*ln(2) + x^2*ln(2)^2/2! + x^3*ln(2)^3/3! + ...
+    // Coefficients scaled to 16-bit fixed point:
+    // c1 = 45426 (ln2), c2 = 15743 (ln2^2/2), c3 = 3638, c4 = 629, c5 = 85, c6 = 10
+    
+    int64 x = nFractionalPart; // 0 to 65535 representing 0.0 to 1.0
+    int64 x2 = (x * x) >> 16;
+    int64 x3 = (x2 * x) >> 16;
+    int64 x4 = (x3 * x) >> 16;
+    int64 x5 = (x4 * x) >> 16;
+    int64 x6 = (x5 * x) >> 16;
+    
+    // 2^frac in fixed point (result scaled by 65536)
+    int64 nTwoToFrac = 65536; // Start with 1.0
+    nTwoToFrac += (x * 45426) >> 16;  // + x * ln(2)
+    nTwoToFrac += (x2 * 15743) >> 16; // + x^2 * ln(2)^2 / 2!
+    nTwoToFrac += (x3 * 3638) >> 16;  // + x^3 * ln(2)^3 / 3!
+    nTwoToFrac += (x4 * 629) >> 16;   // + x^4 * ln(2)^4 / 4!
+    nTwoToFrac += (x5 * 85) >> 16;    // + x^5 * ln(2)^5 / 5!
+    nTwoToFrac += (x6 * 10) >> 16;    // + x^6 * ln(2)^6 / 6!
+    
+    // DIVISION BY ZERO PROTECTION
+    if (nTwoToFrac <= 0) nTwoToFrac = 1;
+    
+    // Apply the adjustment
+    CBigNum bnResult;
+    
+    if (bNegativeExponent) {
+        // target / 2^|exponent| = target / (2^intPart * 2^fracPart)
+        // This INCREASES difficulty (target gets smaller = harder to find)
+        bnResult = target >> nIntegerPart;
+        bnResult = (bnResult * 65536) / nTwoToFrac;
+    } else {
+        // target * 2^exponent = target * 2^intPart * 2^fracPart
+        // This DECREASES difficulty (target gets larger = easier to find)
+        bnResult = target << nIntegerPart;
+        bnResult = (bnResult * nTwoToFrac) / 65536;
+    }
+    
+    return bnResult;
+}
+
+// BUGGY VERSION - kept for backward compatibility (blocks 5000-5299)
+unsigned int ElasticExponentialDifficultyBuggy(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
 {
-    // 1. Basic Checks
     if (pindexLast == NULL) return bnProofOfWorkLimit.GetCompact();
     
     int64 nHalflife = nEEDHalflife;
     
-    // 3. Calculate Solvetime & Drift
     const CBlockIndex* pindexPrevPrev = pindexLast->pprev;
     if (pindexPrevPrev == NULL) return bnProofOfWorkLimit.GetCompact();
     
     int64 nSolvetime = pindexLast->GetBlockTime() - pindexPrevPrev->GetBlockTime();
-    
-    // Prevent negative solvetime
     if (nSolvetime < 1) nSolvetime = 1;
     
     int64 nDrift = nSolvetime - nTargetSpacing;
     
-    // 4. ELASTIC ENHANCEMENT
     bool fStress = false;
     if (nSolvetime > nTargetSpacing * 4) fStress = true;
     if (nSolvetime < nTargetSpacing / 4) fStress = true;
+    if (fStress) nHalflife /= 4;
     
-    if (fStress) {
-        nHalflife /= 4; 
-    }
-    
-    // 5. Apply Adjustment
     CBigNum bnNew;
     bnNew.SetCompact(pindexLast->nBits);
+    bnNew = ApplyExponentialAdjustmentBuggy(bnNew, nDrift, nHalflife);
     
-    bnNew = ApplyExponentialAdjustment(bnNew, nDrift, nHalflife);
-    
-    // 6. Limits
     if (bnNew > bnProofOfWorkLimit) bnNew = bnProofOfWorkLimit;
     if (bnNew == 0) bnNew = 1;
+
+    return bnNew.GetCompact();
+}
+
+// FIXED VERSION V1 - upstream fix (blocks 5300-5606)
+unsigned int ElasticExponentialDifficultyV1(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
+{
+    if (pindexLast == NULL) return bnProofOfWorkLimit.GetCompact();
+    
+    int64 nHalflife = nEEDHalflife;
+    
+    const CBlockIndex* pindexPrevPrev = pindexLast->pprev;
+    if (pindexPrevPrev == NULL) return bnProofOfWorkLimit.GetCompact();
+    
+    int64 nSolvetime = pindexLast->GetBlockTime() - pindexPrevPrev->GetBlockTime();
+    if (nSolvetime < 1) nSolvetime = 1;
+    
+    int64 nDrift = nSolvetime - nTargetSpacing;
+    
+    bool fStress = false;
+    if (nSolvetime > nTargetSpacing * 4) fStress = true;
+    if (nSolvetime < nTargetSpacing / 4) fStress = true;
+    if (fStress) nHalflife /= 4;
+    
+    CBigNum bnNew;
+    bnNew.SetCompact(pindexLast->nBits);
+    bnNew = ApplyExponentialAdjustmentV1(bnNew, nDrift, nHalflife);
+    
+    if (bnNew > bnProofOfWorkLimit) bnNew = bnProofOfWorkLimit;
+    if (bnNew == 0) bnNew = 1;
+
+    return bnNew.GetCompact();
+}
+
+// FIXED VERSION V2 - proper ASERT with current timestamp (blocks 5607+)
+// This version uses the incoming block's timestamp to calculate difficulty,
+// allowing difficulty to decrease when no blocks are being mined.
+unsigned int ElasticExponentialDifficultyV2(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
+{
+    unsigned int nProofOfWorkLimit = bnProofOfWorkLimit.GetCompact();
+    
+    if (pindexLast == NULL) return nProofOfWorkLimit;
+    
+    // Testnet special rule: allow min-difficulty blocks after 2x target spacing
+    if (fTestNet && pblock != NULL) {
+        if (pblock->nTime > pindexLast->nTime + nTargetSpacing * 2)
+            return nProofOfWorkLimit;
+    }
+    
+    // Anchor block for ASERT calculation (activation height)
+    static const int64 nAnchorHeight = nEEDV2Height;
+    
+    // THREAD-SAFE CACHED ANCHOR BLOCK - protected by cs_main
+    // Avoid O(n) traversal on every calculation
+    static const CBlockIndex* pindexCachedAnchor = NULL;
+    static int64 nCachedAnchorTime = 0;
+    static unsigned int nCachedAnchorBits = 0;
+    
+    // V2 uses shorter halflife (8 hours) for more responsive adjustment
+    // This means difficulty doubles/halves every 8 hours of drift from target
+    int64 nHalflife = nEEDV2Halflife;
+    
+    // CRITICAL FIX: Use the CURRENT block's timestamp, not past blocks
+    // This allows difficulty to decrease when mining is stalled
+    int64 nCurrentTime;
+    if (pblock != NULL) {
+        nCurrentTime = pblock->nTime;
+    } else {
+        // Fallback to current time if pblock is null
+        nCurrentTime = GetAdjustedTime();
+    }
+    
+    // Calculate time elapsed since the last block
+    int64 nTimeSinceLastBlock = nCurrentTime - pindexLast->GetBlockTime();
+    
+    // Sanity check: clamp to reasonable range
+    if (nTimeSinceLastBlock < 1) nTimeSinceLastBlock = 1;
+    
+    // ANCHOR-BASED ASERT CALCULATION
+    // Calculate cumulative time drift from anchor block
+    // Target time = (height - anchorHeight) * targetSpacing
+    // Actual time = currentTime - anchorTime
+    // Drift = actualTime - targetTime
+    
+    // Find anchor block (with thread-safe caching for performance)
+    // Note: This function is called with cs_main already held
+    const CBlockIndex* pindexAnchor = pindexCachedAnchor;
+    
+    // ANCHOR VALIDATION: Verify cached anchor is still in main chain
+    // Check if anchor needs refresh (cache miss, wrong height, or orphaned)
+    bool bNeedRefresh = (pindexAnchor == NULL || pindexAnchor->nHeight != nAnchorHeight);
+    
+    // Additional check: ensure anchor is ancestor of current chain
+    if (!bNeedRefresh && pindexAnchor != NULL) {
+        // Walk from pindexLast to anchor height to verify it's in our chain
+        const CBlockIndex* ptest = pindexLast;
+        while (ptest != NULL && ptest->nHeight > nAnchorHeight) {
+            ptest = ptest->pprev;
+        }
+        if (ptest != pindexAnchor) {
+            bNeedRefresh = true;  // Anchor was orphaned, need to find new one
+        }
+    }
+    
+    if (bNeedRefresh) {
+        pindexAnchor = pindexLast;
+        while (pindexAnchor != NULL && pindexAnchor->nHeight > nAnchorHeight) {
+            pindexAnchor = pindexAnchor->pprev;
+        }
+        
+        // Update cache if we found the anchor
+        if (pindexAnchor != NULL && pindexAnchor->nHeight >= nAnchorHeight) {
+            pindexCachedAnchor = pindexAnchor;
+            nCachedAnchorTime = pindexAnchor->GetBlockTime();
+            nCachedAnchorBits = pindexAnchor->nBits;
+        }
+    }
+    
+    int64 nDrift;
+    CBigNum bnAnchorTarget;
+    
+    if (pindexAnchor != NULL && pindexAnchor->nHeight >= nAnchorHeight) {
+        // Full ASERT: calculate drift from anchor
+        int64 nHeightDiff = (pindexLast->nHeight + 1) - pindexAnchor->nHeight;
+        int64 nTargetTime = nHeightDiff * nTargetSpacing;
+        int64 nActualTime = nCurrentTime - (nCachedAnchorTime ? nCachedAnchorTime : pindexAnchor->GetBlockTime());
+        nDrift = nActualTime - nTargetTime;
+        
+        // Use anchor block's difficulty as base
+        bnAnchorTarget.SetCompact(nCachedAnchorBits ? nCachedAnchorBits : pindexAnchor->nBits);
+    } else {
+        // Fallback: simple single-block calculation
+        nDrift = nTimeSinceLastBlock - nTargetSpacing;
+        bnAnchorTarget.SetCompact(pindexLast->nBits);
+    }
+    
+    // ELASTIC ENHANCEMENT: faster response under stress
+    // Symmetric thresholds: 2x target spacing in either direction triggers stress mode
+    bool fStress = false;
+    bool fEmergency = false;
+    
+    if (nTimeSinceLastBlock > nTargetSpacing * 2) fStress = true;   // Mining slowing (> 8 min)
+    if (nTimeSinceLastBlock < nTargetSpacing / 2) fStress = true;   // Mining too fast (< 2 min)
+    
+    // EMERGENCY MODE: If no block for more than 1 hour, use very fast response
+    if (nTimeSinceLastBlock > 3600) {   // More than 1 hour
+        fEmergency = true;
+    }
+    
+    if (fEmergency) {
+        nHalflife /= 8;  // 8x faster: effective 1-hour halflife in emergency
+    } else if (fStress) {
+        nHalflife /= 2;  // 2x faster: effective 4-hour halflife under stress
+    }
+    
+    // HALFLIFE ZERO PROTECTION: Ensure halflife never becomes zero
+    if (nHalflife < 1) nHalflife = 1;
+    
+    // Apply exponential adjustment: target * 2^(drift/halflife)
+    CBigNum bnNew = ApplyExponentialAdjustmentV2(bnAnchorTarget, nDrift, nHalflife);
+    
+    // MAXIMUM DIFFICULTY INCREASE CAP
+    // Prevent difficulty from increasing more than 4x compared to last block
+    // This prevents unreachable difficulty spikes if blocks come very fast
+    CBigNum bnLastTarget;
+    bnLastTarget.SetCompact(pindexLast->nBits);
+    CBigNum bnMinTarget = bnLastTarget / 4;  // Max 4x difficulty increase
+    
+    if (bnNew < bnMinTarget && bnNew > 0) {  // Fixed CBigNum comparison
+        bnNew = bnMinTarget;
+        printf("EED V2: Capped difficulty increase to 4x (preventing spike)\n");
+    }
+    
+    // Apply limits
+    if (bnNew > bnProofOfWorkLimit) bnNew = bnProofOfWorkLimit;
+    if (bnNew <= 0) bnNew = 1;  // Fixed CBigNum comparison
+    
+    // Debug output (only for stress/emergency or every 100 blocks to reduce log spam)
+    if (fStress || fEmergency || (pindexLast->nHeight + 1) % 100 == 0) {
+        printf("EED V2: height=%d, timeSinceLast=%"PRI64d"s, drift=%"PRI64d"s, halflife=%"PRI64d"s, stress=%d, emergency=%d\n",
+               pindexLast->nHeight + 1, nTimeSinceLastBlock, nDrift, nHalflife, fStress, fEmergency);
+    }
 
     return bnNew.GetCompact();
 }
@@ -1365,10 +1669,22 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
     if (pindexLast == NULL)
         return nProofOfWorkLimit;
 
-    // Elastic Exponential Difficulty (EED)
+    // EED V2 - proper polynomial exponential (block 5607+)
+    if (pindexLast->nHeight + 1 >= nEEDV2Height)
+    {
+        return ElasticExponentialDifficultyV2(pindexLast, pblock);
+    }
+
+    // EED V1 - upstream fix (blocks 5300-5606)
+    if (pindexLast->nHeight + 1 >= nEEDFixHeight)
+    {
+        return ElasticExponentialDifficultyV1(pindexLast, pblock);
+    }
+
+    // EED Buggy - original version (blocks 5000-5299)
     if (pindexLast->nHeight + 1 >= nEEDHeight)
     {
-        return ElasticExponentialDifficulty(pindexLast, pblock);
+        return ElasticExponentialDifficultyBuggy(pindexLast, pblock);
     }
 
     // Classic2 Adaptive Difficulty (Block 2500+)
