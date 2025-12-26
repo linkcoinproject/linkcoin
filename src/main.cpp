@@ -1437,13 +1437,12 @@ CBigNum ApplyExponentialAdjustmentV2(CBigNum target, int64 nDrift, int64 nHalfli
     if (bNegativeExponent) {
         // target / 2^|exponent| = target / (2^intPart * 2^fracPart)
         // This INCREASES difficulty (target gets smaller = harder to find)
-        bnResult = target >> nIntegerPart;
-        bnResult = (bnResult * 65536) / nTwoToFrac;
+        // Precision fix: multiply before shifting/dividing
+        bnResult = (target * 65536) / (nTwoToFrac << nIntegerPart);
     } else {
         // target * 2^exponent = target * 2^intPart * 2^fracPart
         // This DECREASES difficulty (target gets larger = easier to find)
-        bnResult = target << nIntegerPart;
-        bnResult = (bnResult * nTwoToFrac) / 65536;
+        bnResult = (target << nIntegerPart) * nTwoToFrac / 65536;
     }
     
     return bnResult;
@@ -1530,6 +1529,7 @@ unsigned int ElasticExponentialDifficultyV2(const CBlockIndex* pindexLast, const
     // THREAD-SAFE CACHED ANCHOR BLOCK - protected by cs_main
     // Avoid O(n) traversal on every calculation
     static const CBlockIndex* pindexCachedAnchor = NULL;
+    static const CBlockIndex* pindexVerifiedTip = NULL; // Cache the verified tip to avoid O(N) traversal
     static int64 nCachedAnchorTime = 0;
     static unsigned int nCachedAnchorBits = 0;
     
@@ -1570,12 +1570,21 @@ unsigned int ElasticExponentialDifficultyV2(const CBlockIndex* pindexLast, const
     // Additional check: ensure anchor is ancestor of current chain
     if (!bNeedRefresh && pindexAnchor != NULL) {
         // Walk from pindexLast to anchor height to verify it's in our chain
-        const CBlockIndex* ptest = pindexLast;
-        while (ptest != NULL && ptest->nHeight > nAnchorHeight) {
-            ptest = ptest->pprev;
-        }
-        if (ptest != pindexAnchor) {
-            bNeedRefresh = true;  // Anchor was orphaned, need to find new one
+        // OPTIMIZATION: If the current block's predecessor matches our last verified tip,
+        // then the anchor (which was verified for the tip) is still verified (O(1)).
+        if (pindexLast != pindexVerifiedTip && pindexLast->pprev != pindexVerifiedTip) {
+            const CBlockIndex* ptest = pindexLast;
+            while (ptest != NULL && ptest->nHeight > nAnchorHeight) {
+                ptest = ptest->pprev;
+            }
+            if (ptest != pindexAnchor) {
+                bNeedRefresh = true;  // Anchor was orphaned, need to find new one
+                pindexVerifiedTip = NULL;
+            } else {
+                pindexVerifiedTip = pindexLast;
+            }
+        } else {
+            pindexVerifiedTip = pindexLast;
         }
     }
     
@@ -1611,25 +1620,6 @@ unsigned int ElasticExponentialDifficultyV2(const CBlockIndex* pindexLast, const
         bnAnchorTarget.SetCompact(pindexLast->nBits);
     }
     
-    // ELASTIC ENHANCEMENT: faster response under stress
-    // Symmetric thresholds: 2x target spacing in either direction triggers stress mode
-    bool fStress = false;
-    bool fEmergency = false;
-    
-    if (nTimeSinceLastBlock > nTargetSpacing * 2) fStress = true;   // Mining slowing (> 8 min)
-    if (nTimeSinceLastBlock < nTargetSpacing / 2) fStress = true;   // Mining too fast (< 2 min)
-    
-    // EMERGENCY MODE: If no block for more than 1 hour, use very fast response
-    if (nTimeSinceLastBlock > 3600) {   // More than 1 hour
-        fEmergency = true;
-    }
-    
-    if (fEmergency) {
-        nHalflife /= 8;  // 8x faster: effective 1-hour halflife in emergency
-    } else if (fStress) {
-        nHalflife /= 2;  // 2x faster: effective 4-hour halflife under stress
-    }
-    
     // HALFLIFE ZERO PROTECTION: Ensure halflife never becomes zero
     if (nHalflife < 1) nHalflife = 1;
     
@@ -1643,7 +1633,7 @@ unsigned int ElasticExponentialDifficultyV2(const CBlockIndex* pindexLast, const
     bnLastTarget.SetCompact(pindexLast->nBits);
     CBigNum bnMinTarget = bnLastTarget / 4;  // Max 4x difficulty increase
     
-    if (bnNew < bnMinTarget && bnNew > 0) {  // Fixed CBigNum comparison
+    if (bnNew < bnMinTarget) {  // Handle case where bnNew might be 0
         bnNew = bnMinTarget;
         printf("EED V2: Capped difficulty increase to 4x (preventing spike)\n");
     }
@@ -1652,10 +1642,10 @@ unsigned int ElasticExponentialDifficultyV2(const CBlockIndex* pindexLast, const
     if (bnNew > bnProofOfWorkLimit) bnNew = bnProofOfWorkLimit;
     if (bnNew <= 0) bnNew = 1;  // Fixed CBigNum comparison
     
-    // Debug output (only for stress/emergency or every 100 blocks to reduce log spam)
-    if (fStress || fEmergency || (pindexLast->nHeight + 1) % 100 == 0) {
-        printf("EED V2: height=%d, timeSinceLast=%"PRI64d"s, drift=%"PRI64d"s, halflife=%"PRI64d"s, stress=%d, emergency=%d\n",
-               pindexLast->nHeight + 1, nTimeSinceLastBlock, nDrift, nHalflife, fStress, fEmergency);
+    // Debug output every 100 blocks or during slow mining to reduce log spam
+    if (nTimeSinceLastBlock > nTargetSpacing * 2 || (pindexLast->nHeight + 1) % 100 == 0) {
+        printf("EED V2: height=%d, timeSinceLast=%"PRI64d"s, drift=%"PRI64d"s, halflife=%"PRI64d"s\n",
+               pindexLast->nHeight + 1, nTimeSinceLastBlock, nDrift, nHalflife);
     }
 
     return bnNew.GetCompact();

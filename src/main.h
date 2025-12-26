@@ -192,6 +192,9 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits);
 unsigned int ComputeMinWork(unsigned int nBase, int64 nTime);
 /** Calculate the next required proof of work */
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock);
+unsigned int ElasticExponentialDifficultyV1(const CBlockIndex* pindexLast, const CBlockHeader *pblock);
+unsigned int ElasticExponentialDifficultyV2(const CBlockIndex* pindexLast, const CBlockHeader *pblock);
+CBigNum ApplyExponentialAdjustmentV2(CBigNum target, int64 nDrift, int64 nHalflife);
 /** Get the number of active peers */
 int GetNumBlocksOfPeers();
 /** Check whether we are doing an initial block download (synchronizing from disk or network) */

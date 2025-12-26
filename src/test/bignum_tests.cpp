@@ -3,6 +3,7 @@
 
 #include "bignum.h"
 #include "util.h"
+#include "main.h"
 
 BOOST_AUTO_TEST_SUITE(bignum_tests)
 
@@ -173,6 +174,38 @@ BOOST_AUTO_TEST_CASE(bignum_SetCompact)
     num.SetCompact(0xff123456);
     BOOST_CHECK_EQUAL(num.GetHex(), "123456000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
     BOOST_CHECK_EQUAL(num.GetCompact(), 0xff123456U);
+}
+
+BOOST_AUTO_TEST_CASE(eed_asert_v2_tests)
+{
+    CBigNum target;
+    target.SetCompact(0x1d00ffff); // A standard target
+    int64 nHalflife = 28800;
+
+    // Test 1: Zero drift (difficulty should not change)
+    CBigNum result1 = ApplyExponentialAdjustmentV2(target, 0, nHalflife);
+    BOOST_CHECK_EQUAL(result1.GetCompact(), target.GetCompact());
+
+    // Test 2: Drift of exactly 1 halflife (target should double, difficulty halves)
+    // 2^1 is approximately 2.0 (1.99992 with current Taylor coefficients)
+    CBigNum result2 = ApplyExponentialAdjustmentV2(target, nHalflife, nHalflife);
+    BOOST_CHECK(result2 > target);
+    BOOST_CHECK(result2 < target * 2 + 100); // Allow slight overshoot if any, but it should be ~2x
+    
+    // Test 3: Drift of exactly -1 halflife (target should halve, difficulty doubles)
+    CBigNum result3 = ApplyExponentialAdjustmentV2(target, -nHalflife, nHalflife);
+    BOOST_CHECK(result3 < target);
+    BOOST_CHECK(result3 > target / 2 - 100);
+
+    // Test 4: Positive Integer shift (3 halflives = 8x increase in target)
+    CBigNum result4 = ApplyExponentialAdjustmentV2(target, nHalflife * 3, nHalflife);
+    BOOST_CHECK(result4 >= target * 8 - 1000);
+    BOOST_CHECK(result4 <= target * 8 + 1000);
+
+    // Test 5: Negative Integer shift (3 halflives = 8x decrease in target)
+    CBigNum result5 = ApplyExponentialAdjustmentV2(target, -nHalflife * 3, nHalflife);
+    BOOST_CHECK(result5 >= target / 8 - 1000);
+    BOOST_CHECK(result5 <= target / 8 + 1000);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
