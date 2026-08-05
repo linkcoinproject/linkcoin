@@ -478,6 +478,7 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
                 // Not applicable when path is "s" or "m" as those indicate a seed
                 // See https://github.com/bitcoin/bitcoin/pull/12924
                 bool internal = false;
+                bool mweb_path = false;
                 uint32_t index = 0;
                 if (keyMeta.hdKeypath != "s" && keyMeta.hdKeypath != "m" && !keyMeta.mweb_index) {
                     std::vector<uint32_t> path;
@@ -492,10 +493,11 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
                         }
                     }
 
-                    // Extract the index and internal from the path
+                    // Extract the index and purpose from the path
                     // Path string is m/0'/k'/i'
                     // Path vector is [0', k', i'] (but as ints OR'd with the hardened bit
-                    // k == 0 for external, 1 for internal. i is the index
+                    // k == 0 for external, 1 for internal, 3 for legacy MWEB (pre-100),
+                    // 100 for current MWEB. i is the index.
                     if (path.size() != 3) {
                         strErr = "Error reading wallet database: keymeta found with unexpected path";
                         return false;
@@ -504,8 +506,12 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
                         strErr = strprintf("Unexpected path index of 0x%08x (expected 0x80000000) for the element at index 0", path[0]);
                         return false;
                     }
-                    if (path[1] != 0x80000000 && path[1] != (1 | 0x80000000) && path[1] != (100 | 0x80000000)) {
-                        strErr = strprintf("Unexpected path index of 0x%08x (expected 0x80000000 or 0x80000001) for the element at index 1", path[1]);
+                    // Accept external (0), internal (1), legacy MWEB (3), and current MWEB (100).
+                    // Legacy wallets (and some pre-standard Junkcoin builds) stored MWEB-related
+                    // keymeta under m/0'/3'/i' rather than m/0'/100'/i' or the x/i form.
+                    if (path[1] != 0x80000000 && path[1] != (1 | 0x80000000)
+                        && path[1] != (3 | 0x80000000) && path[1] != (100 | 0x80000000)) {
+                        strErr = strprintf("Unexpected path index of 0x%08x (expected 0x80000000, 0x80000001, 0x80000003, or 0x80000064) for the element at index 1", path[1]);
                         return false;
                     }
                     if ((path[2] & 0x80000000) == 0) {
@@ -513,6 +519,7 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
                         return false;
                     }
                     internal = path[1] == (1 | 0x80000000);
+                    mweb_path = path[1] == (3 | 0x80000000) || path[1] == (100 | 0x80000000);
                     index = path[2] & ~0x80000000;
                 }
 
@@ -528,6 +535,10 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
                 if (!!keyMeta.mweb_index) {
                     chain.nVersion = std::max(chain.nVersion, CHDChain::VERSION_HD_MWEB_WATCH);
                     chain.nMWEBIndexCounter = std::max(chain.nMWEBIndexCounter, *keyMeta.mweb_index);
+                } else if (mweb_path) {
+                    // Reconstruct MWEB index counter from legacy m/0'/3' or m/0'/100' paths.
+                    chain.nVersion = std::max(chain.nVersion, CHDChain::VERSION_HD_MWEB);
+                    chain.nMWEBIndexCounter = std::max(chain.nMWEBIndexCounter, index);
                 } else if (internal) {
                     chain.nVersion = std::max(chain.nVersion, CHDChain::VERSION_HD_CHAIN_SPLIT);
                     chain.nInternalChainCounter = std::max(chain.nInternalChainCounter, index);

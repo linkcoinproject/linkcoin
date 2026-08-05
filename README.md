@@ -1,85 +1,128 @@
-Litecoin Core integration/staging tree
+Linkcoin Core integration/staging tree
 =====================================
 
-[![Build Status](https://travis-ci.org/litecoin-project/litecoin.svg?branch=master)](https://travis-ci.org/litecoin-project/litecoin)
+https://linkcoin.org
 
-https://litecoin.org
+Copyright (c) 2009-2014 Bitcoin Developers
+Copyright (c) 2014-2025 Linkcoin Developers
 
-What is Litecoin?
+What is Linkcoin?
 ----------------
 
-Litecoin is an experimental digital currency that enables instant payments to
-anyone, anywhere in the world. Litecoin uses peer-to-peer technology to operate
-with no central authority: managing transactions and issuing money are carried
-out collectively by the network. Litecoin Core is the name of open source
-software which enables the use of this currency.
+Linkcoin is a Litecoin-based cryptocurrency using scrypt as proof-of-work.
+ - 4 minute block targets
+ - 80 LNC subsidy, halving every 400,000 blocks (~4 years)
+ - ~84 million total coins
+ - Scrypt-1024-1-1-256 PoW algorithm
+ - Elastic Exponential Difficulty (EED) — dynamic retarget every block
+ - Addresses start with `L`
 
-For more information, as well as an immediately useable, binary version of
-the Litecoin Core software, see [https://litecoin.org](https://litecoin.org).
+For more information, see https://linkcoin.org.
+
+Building
+--------
+
+Linkcoin Core v2.0.0 uses the modern autotools build system.
+
+### Dependencies
+
+```bash
+# Build dependencies (one-time)
+cd depends
+make HOST=x86_64-pc-linux-gnu -j$(nproc)
+cd ..
+```
+
+### Build Daemon
+
+```bash
+./autogen.sh
+./configure --without-gui --disable-wallet
+make -j$(nproc)
+```
+
+Binary: `src/linkcoind`
+
+### Build with Qt GUI
+
+```bash
+./autogen.sh
+./configure
+make -j$(nproc)
+```
+
+Binary: `src/qt/linkcoin-qt`
+
+### Windows Cross-Compile
+
+```bash
+cd depends
+make HOST=x86_64-w64-mingw32 -j$(nproc)
+cd ..
+./autogen.sh
+CONFIG_SITE=$PWD/depends/x86_64-w64-mingw32/share/config.site ./configure
+make -j$(nproc)
+```
+
+Network Parameters
+------------------
+
+| Parameter | Mainnet | Testnet |
+|---|---|---|
+| P2P Port | 7200 | 72555 |
+| RPC Port | 9600 | 96555 |
+| Magic Bytes | fbc0b6db | fcc1b7dc |
+| Address Prefix | 48 (L...) | 111 (m/n...) |
+| P2SH Prefix | 5 (3...) | 196 (2...) |
+| WIF Prefix | 176 (Q...) | 239 (c...) |
+
+Consensus
+---------
+
+- **Genesis**: `2865bdde500f4c65eb97ac69c9bc29850a0571a19f2121613c283fbd2d334bd7`
+- **Block time**: 240 seconds (4 minutes)
+- **Difficulty**: Elastic Exponential Difficulty (EED) retargets every block
+  - Stage 0 (0-387): Original retarget
+  - Stage 1 (388-2499): DigiShield
+  - Stage 2 (2500-4999): Classic2 Adaptive
+  - Stage 3 (5000-5299): EED Buggy
+  - Stage 4 (5300-5606): EED V1
+  - Stage 5 (5607-74999): EED V2 (ASERT anchor-based)
+  - Stage 6 (75000+): EED V3 (per-block ASERT)
+- **Subsidy**: 80 LNC + halving every 400k blocks, IPO block at height 10 (500k LNC)
+- **MAX_MONEY**: 84,000,000 LNC
+- **COINBASE_MATURITY**: 100 blocks
+
+Future Features (disabled, ready for activation)
+------------------------------------------------
+
+- **AuxPoW** (chain ID 0x4C4E) — merged mining support
+- **SegWit** — BIP141/143 witness program
+- **Taproot** — BIP340-342 Schnorr/Taproot
+- **MWEB** — MimbleWimble Extension Blocks
+
+All are pre-configured in chainparams. Activation requires setting the height.
 
 License
 -------
 
-Litecoin Core is released under the terms of the MIT license. See [COPYING](COPYING) for more
-information or see https://opensource.org/licenses/MIT.
+Linkcoin Core is released under the MIT license. See `COPYING`.
 
-Development Process
+Development process
 -------------------
 
-The `master` branch is regularly built (see `doc/build-*.md` for instructions) and tested, but it is not guaranteed to be
-completely stable. [Tags](https://github.com/litecoin-project/litecoin/tags) are created
-regularly from release branches to indicate new official, stable release versions of Litecoin Core.
+The `master` branch is the stable release. The `rebase-ltc` branch is the
+current development branch (Litecoin 0.21 base with Linkcoin consensus).
 
-The https://github.com/litecoin-project/gui repository is used exclusively for the
-development of the GUI. Its master branch is identical in all monotree
-repositories. Release branches and tags do not exist, so please do not fork
-that repository unless it is for development reasons.
-
-The contribution workflow is described in [CONTRIBUTING.md](CONTRIBUTING.md)
-and useful hints for developers can be found in [doc/developer-notes.md](doc/developer-notes.md).
-
-The developer [mailing list](https://groups.google.com/forum/#!forum/litecoin-dev)
-should be used to discuss complicated or controversial changes before working
-on a patch set.
-
-Developer IRC can be found on Freenode at #litecoin-dev.
+Pull requests are welcome. For major changes, start a discussion first.
 
 Testing
 -------
 
-Testing and code review is the bottleneck for development; we get more pull
-requests than we can review and test on short notice. Please be patient and help out by testing
-other people's pull requests, and remember this is a security-critical project where any mistake might cost people
-lots of money.
+```bash
+# Unit tests
+make check
 
-### Automated Testing
-
-Developers are strongly encouraged to write [unit tests](src/test/README.md) for new code, and to
-submit new unit tests for old code. Unit tests can be compiled and run
-(assuming they weren't disabled in configure) with: `make check`. Further details on running
-and extending unit tests can be found in [/src/test/README.md](/src/test/README.md).
-
-There are also [regression and integration tests](/test), written
-in Python, that are run automatically on the build server.
-These tests can be run (if the [test dependencies](/test) are installed) with: `test/functional/test_runner.py`
-
-The Travis CI system makes sure that every pull request is built for Windows, Linux, and macOS, and that unit/sanity tests are run automatically.
-
-### Manual Quality Assurance (QA) Testing
-
-Changes should be tested by somebody other than the developer who wrote the
-code. This is especially important for large or high-risk changes. It is useful
-to add a test plan to the pull request description if testing the changes is
-not straightforward.
-
-Translations
-------------
-
-We only accept translation fixes that are submitted through [Bitcoin Core's Transifex page](https://www.transifex.com/projects/p/bitcoin/).
-Translations are converted to Litecoin periodically.
-
-Translations are periodically pulled from Transifex and merged into the git repository. See the
-[translation process](doc/translation_process.md) for details on how this works.
-
-**Important**: We do not accept translation changes as GitHub pull requests because the next
-pull from Transifex would automatically overwrite them again.
+# Functional tests
+test/functional/test_runner.py
+```

@@ -24,4 +24,7 @@ uint256 BlockMerkleRoot(const CBlock& block, bool* mutated = nullptr);
  */
 uint256 BlockWitnessMerkleRoot(const CBlock& block, bool* mutated = nullptr);
 
+std::vector<uint256> ComputeMerkleBranch(const std::vector<uint256>& leaves, uint32_t position);
+std::vector<uint256> BlockMerkleBranch(const CBlock& block, uint32_t position);
+
 #endif // BITCOIN_CONSENSUS_MERKLE_H

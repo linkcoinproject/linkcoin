@@ -12,6 +12,26 @@ const struct VBDeploymentInfo VersionBitsDeploymentInfo[Consensus::MAX_VERSION_B
         /*.gbt_force =*/ true,
     },
     {
+        /*.name =*/ "bip34",
+        /*.gbt_force =*/ true,
+    },
+    {
+        /*.name =*/ "bip66",
+        /*.gbt_force =*/ true,
+    },
+    {
+        /*.name =*/ "bip65",
+        /*.gbt_force =*/ true,
+    },
+    {
+        /*.name =*/ "csv",
+        /*.gbt_force =*/ true,
+    },
+    {
+        /*.name =*/ "segwit",
+        /*.gbt_force =*/ true,
+    },
+    {
         /*.name =*/ "taproot",
         /*.gbt_force =*/ true,
     },

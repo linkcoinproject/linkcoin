@@ -11,52 +11,63 @@
 
 BOOST_FIXTURE_TEST_SUITE(pow_tests, BasicTestingSetup)
 
-/* Test calculation of next difficulty target with no constraints applying */
+// Junkcoin uses a 1-day (nPowTargetTimespan) retarget window with the standard
+// Litecoin clamp: the measured timespan is bounded to [timespan/4, timespan*4],
+// so difficulty can change by at most a factor of 4 per retarget, and the target
+// is capped at powLimit. The scenarios below drive each of those bounds using
+// Junkcoin's own parameters (the previous vectors were inherited Litecoin
+// known-answers and assumed Litecoin's 3.5-day window).
+
+/* On-target retarget leaves difficulty unchanged */
 BOOST_AUTO_TEST_CASE(get_next_work)
 {
     const auto chainParams = CreateChainParams(*m_node.args, CBaseChainParams::MAIN);
-    int64_t nLastRetargetTime = 1358118740; // Block #30240
+    const auto& params = chainParams->GetConsensus();
+    int64_t nLastRetargetTime = 1500000000;
     CBlockIndex pindexLast;
     pindexLast.nHeight = 280223;
-    pindexLast.nTime = 1358378777;  // Block #280223
-    pindexLast.nBits = 0x1c0ac141;
-    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), 0x1c093f8dU);
+    pindexLast.nTime = nLastRetargetTime + params.nPowTargetTimespan; // exactly on target
+    pindexLast.nBits = 0x1b075cf1;
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, params), 0x1b075cf1U);
 }
 
-/* Test the constraint on the upper bound for next work */
+/* Test the constraint on the upper bound for next work (powLimit cap) */
 BOOST_AUTO_TEST_CASE(get_next_work_pow_limit)
 {
     const auto chainParams = CreateChainParams(*m_node.args, CBaseChainParams::MAIN);
-    int64_t nLastRetargetTime = 1317972665; // Block #0
+    const auto& params = chainParams->GetConsensus();
+    int64_t nLastRetargetTime = 1500000000;
     CBlockIndex pindexLast;
     pindexLast.nHeight = 2015;
-    pindexLast.nTime = 1318480354;  // Block #2015
-    pindexLast.nBits = 0x1e0ffff0;
-    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), 0x1e0fffffU);
+    pindexLast.nTime = nLastRetargetTime + params.nPowTargetTimespan * 100; // huge slowdown
+    pindexLast.nBits = 0x1e0ffff0; // just below powLimit; easing is capped at powLimit
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, params), 0x1e0fffffU);
 }
 
-/* Test the constraint on the lower bound for actual time taken */
+/* Test the constraint on the lower bound for actual time taken (4x harder) */
 BOOST_AUTO_TEST_CASE(get_next_work_lower_limit_actual)
 {
     const auto chainParams = CreateChainParams(*m_node.args, CBaseChainParams::MAIN);
-    int64_t nLastRetargetTime = 1401682934; // Block #66528
+    const auto& params = chainParams->GetConsensus();
+    int64_t nLastRetargetTime = 1500000000;
     CBlockIndex pindexLast;
     pindexLast.nHeight = 578591;
-    pindexLast.nTime = 1401757934;  // Block #578591
-    pindexLast.nBits = 0x1b075cf1;
-    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), 0x1b01d73cU);
+    pindexLast.nTime = nLastRetargetTime + 1; // far below timespan/4 -> clamps to timespan/4
+    pindexLast.nBits = 0x1b075cf1;            // target / 4 == 0x1b01d73c
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, params), 0x1b01d73cU);
 }
 
-/* Test the constraint on the upper bound for actual time taken */
+/* Test the constraint on the upper bound for actual time taken (4x easier) */
 BOOST_AUTO_TEST_CASE(get_next_work_upper_limit_actual)
 {
     const auto chainParams = CreateChainParams(*m_node.args, CBaseChainParams::MAIN);
-    int64_t nLastRetargetTime = 1463690315; // NOTE: Not an actual block time
+    const auto& params = chainParams->GetConsensus();
+    int64_t nLastRetargetTime = 1500000000;
     CBlockIndex pindexLast;
     pindexLast.nHeight = 1001951;
-    pindexLast.nTime = 1464900315;  // Block #46367
-    pindexLast.nBits = 0x1b015318;
-    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), 0x1b054c60U);
+    pindexLast.nTime = nLastRetargetTime + params.nPowTargetTimespan * 100; // far above timespan*4
+    pindexLast.nBits = 0x1b015318;            // target * 4 == 0x1b054c60
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, params), 0x1b054c60U);
 }
 
 BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_negative_target)
@@ -155,7 +166,7 @@ void sanity_check_chainparams(const ArgsManager& args, std::string chainName)
     BOOST_CHECK(UintToArith256(consensus.powLimit) >= pow_compact);
 
     // check max target * 4*nPowTargetTimespan doesn't overflow -- see pow.cpp:CalculateNextWorkRequired()
-    /* Litecoin: we allow overflowing by 1 bit
+    /* Junkcoin: we allow overflowing by 1 bit
     if (!consensus.fPowNoRetargeting) {
         arith_uint256 targ_max("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
         targ_max /= consensus.nPowTargetTimespan*4;

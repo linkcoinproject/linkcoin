@@ -55,6 +55,14 @@ CreateWalletDialog::CreateWalletDialog(QWidget* parent) :
     ui->descriptor_checkbox->setEnabled(false);
     ui->descriptor_checkbox->setChecked(false);
 
+    // Setup address type combo box
+    ui->address_type_combo->addItem(tr("Legacy (P2PKH)"), "legacy");
+    ui->address_type_combo->addItem(tr("SegWit (Bech32/P2WPKH)"), "bech32");
+    ui->address_type_combo->addItem(tr("Wrapped SegWit (P2SH-P2WPKH)"), "p2sh-segwit");
+    ui->address_type_combo->addItem(tr("MWEB (Privacy)"), "mweb");
+    // Set default to SegWit (Bech32)
+    ui->address_type_combo->setCurrentIndex(1);
+
 }
 
 CreateWalletDialog::~CreateWalletDialog()
@@ -85,4 +93,9 @@ bool CreateWalletDialog::isMakeBlankWalletChecked() const
 bool CreateWalletDialog::isDescriptorWalletChecked() const
 {
     return ui->descriptor_checkbox->isChecked();
+}
+
+QString CreateWalletDialog::getAddressType() const
+{
+    return ui->address_type_combo->currentData().toString();
 }

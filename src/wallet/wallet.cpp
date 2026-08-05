@@ -6,6 +6,7 @@
 #include <wallet/wallet.h>
 
 #include <chain.h>
+#include <chainparams.h>
 #include <consensus/consensus.h>
 #include <consensus/validation.h>
 #include <fs.h>
@@ -1700,23 +1701,12 @@ CAmount CWallet::GetCredit(const CTransaction& tx, const boost::optional<MWEB::W
             throw std::runtime_error(std::string(__func__) + ": value out of range");
     }
 
-    bool has_my_inputs = false;
-    for (const CTxInput& txin : tx.GetInputs()) {
+    for (const PegOutCoin& pegout : tx.mweb_tx.GetPegOuts()) {
         LOCK(cs_wallet);
-        if (IsMine(txin)) {
-            has_my_inputs = true;
-            break;
-        }
-    }
-
-    if (!has_my_inputs) {
-        for (const PegOutCoin& pegout : tx.mweb_tx.GetPegOuts()) {
-            LOCK(cs_wallet);
-            if (!(IsMine(DestinationAddr(pegout.GetScriptPubKey())) & filter)) {
-                nCredit += pegout.GetAmount();
-                if (!MoneyRange(nCredit))
-                    throw std::runtime_error(std::string(__func__) + ": value out of range");
-            }
+        if (IsMine(DestinationAddr(pegout.GetScriptPubKey())) & filter) {
+            nCredit += pegout.GetAmount();
+            if (!MoneyRange(nCredit))
+                throw std::runtime_error(std::string(__func__) + ": value out of range");
         }
     }
 
@@ -3380,6 +3370,30 @@ bool CWallet::GetNewDestination(const OutputType type, const std::string label, 
     LOCK(cs_wallet);
     error.clear();
 
+    // Junkcoin: Check feature activation before creating addresses
+    // This prevents creating anyone-can-spend outputs before features are activated
+    const int currentHeight = GetLastBlockHeight();
+    const Consensus::Params& consensus = Params().GetConsensus();
+
+    // Check SegWit activation for BECH32 and P2SH_SEGWIT addresses
+    if ((type == OutputType::BECH32 || type == OutputType::P2SH_SEGWIT) && 
+        currentHeight < consensus.SegwitHeight) {
+        error = strprintf("SegWit addresses are not available until block %d (current: %d). "
+                          "Using SegWit before activation makes funds vulnerable.",
+                          consensus.SegwitHeight, currentHeight);
+        return false;
+    }
+
+    // Note: Taproot (BECH32M) not supported in this codebase - OutputType doesn't have BECH32M
+
+    // Check MWEB activation for MWEB addresses
+    if (type == OutputType::MWEB && currentHeight < consensus.MWEBHeight) {
+        error = strprintf("MWEB addresses are not available until block %d (current: %d). "
+                          "Using MWEB before activation makes funds vulnerable.",
+                          consensus.MWEBHeight, currentHeight);
+        return false;
+    }
+
     bool result = false;
     auto spk_man = GetScriptPubKeyMan(type, false /* internal */);
     if (spk_man) {
@@ -3399,6 +3413,28 @@ bool CWallet::GetNewChangeDestination(const OutputType type, CTxDestination& des
 {
     LOCK(cs_wallet);
     error.clear();
+
+    // Junkcoin: Check feature activation before creating change addresses
+    // This prevents creating anyone-can-spend outputs before features are activated
+    const int currentHeight = GetLastBlockHeight();
+    const Consensus::Params& consensus = Params().GetConsensus();
+
+    // Check SegWit activation for BECH32 and P2SH_SEGWIT addresses
+    if ((type == OutputType::BECH32 || type == OutputType::P2SH_SEGWIT) && 
+        currentHeight < consensus.SegwitHeight) {
+        error = strprintf("SegWit change addresses are not available until block %d (current: %d).",
+                          consensus.SegwitHeight, currentHeight);
+        return false;
+    }
+
+    // Note: Taproot (BECH32M) not supported in this codebase - OutputType doesn't have BECH32M
+
+    // Check MWEB activation for MWEB addresses
+    if (type == OutputType::MWEB && currentHeight < consensus.MWEBHeight) {
+        error = strprintf("MWEB change addresses are not available until block %d (current: %d).",
+                          consensus.MWEBHeight, currentHeight);
+        return false;
+    }
 
     ReserveDestination reservedest(this, type);
     if (!reservedest.GetReservedDestination(dest, true)) {

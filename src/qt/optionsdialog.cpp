@@ -136,9 +136,7 @@ OptionsDialog::OptionsDialog(QWidget *parent, bool enableWallet) :
         ui->minimizeToTray->setEnabled(false);
     }
 
-    if (!gArgs.IsArgSet("-debug")) {
-        ui->mwebFeatures->setVisible(false);
-    }
+    // MWEB features checkbox always visible (removed debug requirement)
 
     GUIUtil::handleCloseWindowShortcut(this);
 }

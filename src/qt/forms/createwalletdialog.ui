@@ -55,6 +55,24 @@
     </widget>
    </item>
    <item>
+    <layout class="QHBoxLayout" name="address_type_layout">
+     <item>
+      <widget class="QLabel" name="address_type_label">
+       <property name="text">
+        <string>Address Type</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="address_type_combo">
+       <property name="toolTip">
+        <string>Select the default address type for this wallet</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
     <spacer name="verticalSpacer_1">
      <property name="orientation">
       <enum>Qt::Vertical</enum>

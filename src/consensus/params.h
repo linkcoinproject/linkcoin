@@ -14,6 +14,11 @@ namespace Consensus {
 enum DeploymentPos
 {
     DEPLOYMENT_TESTDUMMY,
+    DEPLOYMENT_BIP34,
+    DEPLOYMENT_BIP66,
+    DEPLOYMENT_BIP65,
+    DEPLOYMENT_CSV,
+    DEPLOYMENT_SEGWIT,
     DEPLOYMENT_TAPROOT, // Deployment of Schnorr/Taproot (BIPs 340-342)
     DEPLOYMENT_MWEB, // Deployment of MWEB (LIPs 0002-0004)
     // NOTE: Also add new deployments to VersionBitsDeploymentInfo in versionbits.cpp
@@ -71,6 +76,14 @@ struct Params {
      * Note that segwit v0 script rules are enforced on all blocks except the
      * BIP 16 exception blocks. */
     int SegwitHeight;
+    /** Block height at which Taproot (BIP340, BIP341, BIP342) becomes active.
+     * Set to std::numeric_limits<int>::max() to disable. */
+    int TaprootHeight;
+    /** Block height at which MWEB becomes active.
+     * Set to std::numeric_limits<int>::max() to disable. */
+    int MWEBHeight;
+    /** Block height at which legacy disabled opcodes (OP_CAT, OP_MUL, etc.) are re-enabled. */
+    int DisabledScriptReactivationHeight;
     /** Don't warn about unknown BIP 9 activations below this height.
      * This prevents us from warning about the CSV and segwit activations. */
     int MinBIP9WarningHeight;
@@ -93,6 +106,9 @@ struct Params {
     uint256 nMinimumChainWork;
     /** By default assume that the signatures in ancestors of this block are valid */
     uint256 defaultAssumeValid;
+    
+    /** Linkcoin: Number of blocks that coinbase transactions must mature before they can be spent */
+    uint32_t nCoinbaseMaturity;
 
     /**
      * If true, witness commitments contain a payload equal to a Bitcoin Script solution
@@ -100,6 +116,43 @@ struct Params {
      */
     bool signet_blocks{false};
     std::vector<uint8_t> signet_challenge;
+    
+    /** Linkcoin: AuxPoW parameters */
+    int nAuxpowChainId;
+    bool fStrictChainId;
+    int nAuxpowStartHeight;
+    int nBlockAfterAuxpowRewardThreshold;
+    int nLegacyBlocksBefore; // -1 for "always allow"
+    
+    /** Linkcoin: Digishield parameters */
+    bool fDigishieldDifficultyCalculation{false};
+    bool fPowAllowDigishieldMinDifficultyBlocks{false};
+    bool fSimplifiedRewards{false};
+    
+    /** Linkcoin: Height-aware consensus parameters (for consensus tree) */
+    uint32_t nHeightEffective{0}; // When these parameters come into use
+    struct Params *pLeft{nullptr};  // Left hand branch
+    struct Params *pRight{nullptr}; // Right hand branch
+    
+    /**
+     * Get the consensus parameters for a given height.
+     * Uses binary search tree to find the correct parameters.
+     * @param nTargetHeight Height to query
+     * @return Consensus parameters for that height
+     */
+    const Consensus::Params *GetConsensus(uint32_t nTargetHeight) const;
+    
+    /**
+     * Check whether or not to allow legacy blocks at the given height.
+     * @param nHeight Height of the block to check.
+     * @return True if it is allowed to have a legacy version.
+     */
+    bool AllowLegacyBlocks(unsigned nHeight) const
+    {
+        if(nAuxpowStartHeight < 0) // To always allow legacy blocks, set nAuxpowStartHeight to -1
+            return true;
+        return static_cast<int>(nHeight) < nAuxpowStartHeight;
+    }
 };
 } // namespace Consensus
 

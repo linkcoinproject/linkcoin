@@ -243,7 +243,7 @@ void test_one_input(const std::vector<uint8_t>& buffer)
                 break;
             }
             try {
-                (void)Consensus::CheckTxInputs(transaction, state, coins_view_cache, fuzzed_data_provider.ConsumeIntegralInRange<int>(0, std::numeric_limits<int>::max()), tx_fee_out);
+                (void)Consensus::CheckTxInputs(transaction, state, coins_view_cache, fuzzed_data_provider.ConsumeIntegralInRange<int>(0, std::numeric_limits<int>::max()), tx_fee_out, Params().GetConsensus());
                 assert(MoneyRange(tx_fee_out));
             } catch (const std::runtime_error&) {
             }

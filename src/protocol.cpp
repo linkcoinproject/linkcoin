@@ -145,10 +145,21 @@ bool CMessageHeader::IsCommandValid() const
 
 
 ServiceFlags GetDesirableServiceFlags(ServiceFlags services) {
+    ServiceFlags desirable = NODE_NONE;
     if ((services & NODE_NETWORK_LIMITED) && g_initial_block_download_completed) {
-        return ServiceFlags(NODE_NETWORK_LIMITED | NODE_WITNESS | NODE_MWEB);
+        desirable = NODE_NETWORK_LIMITED;
+    } else {
+        desirable = NODE_NETWORK;
     }
-    return ServiceFlags(NODE_NETWORK | NODE_WITNESS | NODE_MWEB);
+
+    const Consensus::Params& consensus = Params().GetConsensus(0);
+    if (consensus.SegwitHeight != std::numeric_limits<int>::max()) {
+        desirable = ServiceFlags(desirable | NODE_WITNESS);
+    }
+    if (consensus.MWEBHeight != std::numeric_limits<int>::max()) {
+        desirable = ServiceFlags(desirable | NODE_MWEB);
+    }
+    return desirable;
 }
 
 void SetServiceFlagsIBDCache(bool state) {

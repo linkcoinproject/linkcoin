@@ -193,6 +193,7 @@ define $(package)_extract_cmds
 endef
 
 define $(package)_preprocess_cmds
+  sed -i.old "1i#include <limits>" qtbase/src/corelib/tools/qbytearraymatcher.h && \
   patch -p1 -i $($(package)_patch_dir)/freetype_back_compat.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_powerpc_libpng.patch && \
   sed -i.old "s|updateqm.commands = \$$$$\$$$$LRELEASE|updateqm.commands = $($(package)_extract_dir)/qttools/bin/lrelease|" qttranslations/translations/translations.pro && \

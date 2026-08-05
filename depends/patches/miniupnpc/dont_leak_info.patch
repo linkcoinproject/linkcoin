@@ -27,6 +27,6 @@ index d5b7970..05aeb9c 100644
  				 "Connection: Close\r\n"
 -				 "User-Agent: " OS_STRING ", " UPNP_VERSION_STRING ", MiniUPnPc/" MINIUPNPC_VERSION_STRING "\r\n"
 +				 "User-Agent: " UPNP_VERSION_STRING "\r\n"
- 
+
  				 "\r\n",
  			   path, httpversion, host, port);

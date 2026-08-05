@@ -1637,7 +1637,12 @@ static void ThreadMapPort()
     struct IGDdatas data;
     int r;
 
+#if MINIUPNPC_API_VERSION >= 18
+    char wanaddr[64] = "";
+    r = UPNP_GetValidIGD(devlist, &urls, &data, lanaddr, sizeof(lanaddr), wanaddr, sizeof(wanaddr));
+#else
     r = UPNP_GetValidIGD(devlist, &urls, &data, lanaddr, sizeof(lanaddr));
+#endif
     if (r == 1)
     {
         if (fDiscover) {
@@ -1809,7 +1814,10 @@ void CConnman::ThreadDNSAddressSeed()
             std::vector<CNetAddr> vIPs;
             std::vector<CAddress> vAdd;
             ServiceFlags requiredServiceBits = GetDesirableServiceFlags(NODE_NONE);
-            std::string host = strprintf("x%x.%s", requiredServiceBits, seed);
+            
+            // Linkcoin: Try plain hostname first (no service bit filtering)
+            // Linkcoin DNS seeds don't support x1.hostname format
+            std::string host = seed;
             CNetAddr resolveSource;
             if (!resolveSource.SetInternal(host)) {
                 continue;
@@ -1825,9 +1833,18 @@ void CConnman::ThreadDNSAddressSeed()
                 }
                 addrman.Add(vAdd, resolveSource);
             } else {
-                // We now avoid directly using results from DNS Seeds which do not support service bit filtering,
-                // instead using them as a addrfetch to get nodes with our desired service bits.
-                AddAddrFetch(seed);
+                // Fallback: try with service bit prefix (for future compatibility)
+                std::string host_with_bits = strprintf("x%x.%s", requiredServiceBits, seed);
+                if (LookupHost(host_with_bits, vIPs, nMaxIPs, true)) {
+                    for (const CNetAddr& ip : vIPs) {
+                        int nOneDay = 24*3600;
+                        CAddress addr = CAddress(CService(ip, Params().GetDefaultPort()), requiredServiceBits);
+                        addr.nTime = GetTime() - 3*nOneDay - rng.randrange(4*nOneDay);
+                        vAdd.push_back(addr);
+                        found++;
+                    }
+                    addrman.Add(vAdd, resolveSource);
+                }
             }
         }
         --seeds_right_now;

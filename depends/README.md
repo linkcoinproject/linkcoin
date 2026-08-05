@@ -19,6 +19,7 @@ build. In the above example, a prefix dir named x86_64-w64-mingw32 will be
 created. To use it for Litecoin:
 
     ./configure --prefix=$PWD/depends/x86_64-w64-mingw32
+    ./configure --prefix=$PWD/depends/x86_64-pc-linux-gnu
 
 Common `host-platform-triplets` for cross compilation are:
 

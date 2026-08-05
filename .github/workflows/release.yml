@@ -1,0 +1,437 @@
+name: Build and Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      upload_tag:
+        description: "If set, upload artifacts to this existing release tag (e.g. 2.0.0)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+env:
+  JOBS: 4
+
+jobs:
+  linux-amd64:
+    name: Linux x86_64
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential libtool autotools-dev automake pkg-config \
+            bsdmainutils curl git python3 gperf bison zip \
+            libxkbcommon-dev libxcb-xinerama0-dev
+
+      - name: Cache depends
+        uses: actions/cache@v4
+        with:
+          path: |
+            depends/built
+            depends/sources
+            depends/work
+            depends/SDKs
+          key: depends-linux-amd64-${{ hashFiles('depends/packages/*', 'depends/patches/**', 'depends/Makefile', 'depends/hosts/**', 'depends/builders/**') }}
+          restore-keys: depends-linux-amd64-
+
+      - name: Build depends
+        run: make -C depends HOST=x86_64-pc-linux-gnu -j${JOBS}
+
+      - name: Configure and build
+        run: |
+          ./autogen.sh
+          ./configure \
+            --prefix="$PWD/depends/x86_64-pc-linux-gnu" \
+            --disable-tests \
+            --disable-bench \
+            --disable-gui-tests
+          make -j${JOBS}
+          strip src/linkcoind src/linkcoin-cli src/linkcoin-tx || true
+          strip src/qt/linkcoin-qt || true
+
+      - name: Stage artifacts
+        run: |
+          mkdir -p dist
+          cp -f src/linkcoind      dist/linkcoind-linux-x86_64
+          cp -f src/linkcoin-cli   dist/linkcoin-cli-linux-x86_64
+          cp -f src/linkcoin-tx    dist/linkcoin-tx-linux-x86_64
+          cp -f src/qt/linkcoin-qt dist/linkcoin-qt-linux-x86_64
+          (cd dist && zip -9 ../linkcoin-linux-x86_64.zip \
+            linkcoind-linux-x86_64 \
+            linkcoin-cli-linux-x86_64 \
+            linkcoin-tx-linux-x86_64 \
+            linkcoin-qt-linux-x86_64)
+          tar -C dist -czf linkcoin-linux-x86_64.tar.gz \
+            linkcoind-linux-x86_64 \
+            linkcoin-cli-linux-x86_64 \
+            linkcoin-tx-linux-x86_64 \
+            linkcoin-qt-linux-x86_64
+          ls -lah dist linkcoin-linux-x86_64.zip
+          test -s linkcoin-linux-x86_64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: |
+            dist/linkcoind-linux-x86_64
+            dist/linkcoin-cli-linux-x86_64
+            dist/linkcoin-tx-linux-x86_64
+            dist/linkcoin-qt-linux-x86_64
+            linkcoin-linux-x86_64.zip
+            linkcoin-linux-x86_64.tar.gz
+
+  linux-arm64:
+    name: Linux aarch64
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential libtool autotools-dev automake pkg-config \
+            bsdmainutils curl git python3 gperf bison zip
+
+      - name: Cache depends
+        uses: actions/cache@v4
+        with:
+          path: |
+            depends/built
+            depends/sources
+            depends/work
+            depends/SDKs
+          key: depends-linux-arm64-noqt-${{ hashFiles('depends/packages/*', 'depends/patches/**', 'depends/Makefile', 'depends/funcs.mk', 'depends/hosts/**', 'depends/builders/**') }}
+          restore-keys: depends-linux-arm64-noqt-
+
+      - name: Build depends
+        run: |
+          HOST="$(./depends/config.guess)"
+          echo "HOST=$HOST"
+          echo "HOST=$HOST" >> "$GITHUB_ENV"
+          make -C depends HOST="$HOST" NO_QT=1 -j${JOBS} V=1
+
+      - name: Configure and build
+        run: |
+          ./autogen.sh
+          ./configure \
+            --prefix="$PWD/depends/${HOST}" \
+            --with-gui=no \
+            --disable-tests \
+            --disable-bench \
+            --disable-gui-tests
+          make -j${JOBS}
+          strip src/linkcoind src/linkcoin-cli src/linkcoin-tx
+
+      - name: Stage artifacts
+        run: |
+          mkdir -p dist
+          cp -f src/linkcoind    dist/linkcoind-linux-aarch64
+          cp -f src/linkcoin-cli dist/linkcoin-cli-linux-aarch64
+          cp -f src/linkcoin-tx  dist/linkcoin-tx-linux-aarch64
+          (cd dist && zip -9 ../linkcoin-linux-aarch64.zip \
+            linkcoind-linux-aarch64 \
+            linkcoin-cli-linux-aarch64 \
+            linkcoin-tx-linux-aarch64)
+          tar -C dist -czf linkcoin-linux-aarch64.tar.gz \
+            linkcoind-linux-aarch64 \
+            linkcoin-cli-linux-aarch64 \
+            linkcoin-tx-linux-aarch64
+          ls -lah dist linkcoin-linux-aarch64.zip
+          test -s linkcoin-linux-aarch64.zip
+          ./src/linkcoind -version || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-aarch64
+          path: |
+            dist/linkcoind-linux-aarch64
+            dist/linkcoin-cli-linux-aarch64
+            dist/linkcoin-tx-linux-aarch64
+            linkcoin-linux-aarch64.zip
+            linkcoin-linux-aarch64.tar.gz
+
+  windows:
+    name: Windows x86_64
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential libtool autotools-dev automake pkg-config \
+            bsdmainutils curl git python3 gperf bison \
+            g++-mingw-w64-x86-64 nsis zip
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+
+      - name: Cache depends
+        uses: actions/cache@v4
+        with:
+          path: |
+            depends/built
+            depends/sources
+            depends/work
+            depends/SDKs
+          key: depends-win-amd64-${{ hashFiles('depends/packages/*', 'depends/patches/**', 'depends/Makefile', 'depends/hosts/**', 'depends/builders/**') }}
+          restore-keys: depends-win-amd64-
+
+      - name: Build depends
+        run: make -C depends HOST=x86_64-w64-mingw32 -j${JOBS}
+
+      - name: Configure and build
+        run: |
+          ./autogen.sh
+          ./configure \
+            --prefix="$PWD/depends/x86_64-w64-mingw32" \
+            --host=x86_64-w64-mingw32 \
+            --disable-tests \
+            --disable-bench \
+            --disable-gui-tests
+          make -j${JOBS}
+          x86_64-w64-mingw32-strip src/linkcoind.exe src/linkcoin-cli.exe src/linkcoin-tx.exe || true
+          x86_64-w64-mingw32-strip src/qt/linkcoin-qt.exe || true
+
+      - name: Stage artifacts
+        run: |
+          mkdir -p dist
+          cp -f src/linkcoind.exe      dist/linkcoind-windows-x86_64.exe
+          cp -f src/linkcoin-cli.exe   dist/linkcoin-cli-windows-x86_64.exe
+          cp -f src/linkcoin-tx.exe    dist/linkcoin-tx-windows-x86_64.exe
+          cp -f src/qt/linkcoin-qt.exe dist/linkcoin-qt-windows-x86_64.exe
+          (cd dist && zip -9 ../linkcoin-windows-x86_64.zip \
+            linkcoind-windows-x86_64.exe \
+            linkcoin-cli-windows-x86_64.exe \
+            linkcoin-tx-windows-x86_64.exe \
+            linkcoin-qt-windows-x86_64.exe)
+          ls -lah dist linkcoin-windows-x86_64.zip
+          test -s linkcoin-windows-x86_64.zip
+          ZIP_BYTES=$(stat -c%s linkcoin-windows-x86_64.zip)
+          echo "windows zip bytes=$ZIP_BYTES"
+          if [ "$ZIP_BYTES" -lt 1000000 ]; then
+            echo "ERROR: windows zip too small"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: |
+            dist/*-windows-x86_64.exe
+            linkcoin-windows-x86_64.zip
+
+  macos:
+    name: macOS arm64
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Homebrew dependencies
+        run: |
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+          export HOMEBREW_NO_REQUIRE_TAP_TRUST=1
+          brew update
+          brew install automake libtool boost pkg-config python@3 \
+            qt@5 libevent berkeley-db@4 openssl@3 librsvg qrencode || true
+          brew list --versions automake libtool boost pkg-config qt@5 libevent \
+            berkeley-db@4 openssl@3 qrencode
+
+      - name: Configure and build
+        run: |
+          set -e
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+          export HOMEBREW_NO_REQUIRE_TAP_TRUST=1
+          export PATH="$(brew --prefix qt@5)/bin:$PATH"
+          BOOST_PREFIX="$(brew --prefix boost)"
+          OPENSSL_PREFIX="$(brew --prefix openssl@3)"
+          BDB_PREFIX="$(brew --prefix berkeley-db@4)"
+          QT_PREFIX="$(brew --prefix qt@5)"
+          EVENT_PREFIX="$(brew --prefix libevent)"
+          QRENCODE_PREFIX="$(brew --prefix qrencode)"
+          export PKG_CONFIG_PATH="${QT_PREFIX}/lib/pkgconfig:${EVENT_PREFIX}/lib/pkgconfig:${OPENSSL_PREFIX}/lib/pkgconfig:${QRENCODE_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+          ./autogen.sh
+          ./configure \
+            --with-gui=qt5 \
+            --with-qrencode \
+            --disable-tests \
+            --disable-bench \
+            --disable-gui-tests \
+            --without-miniupnpc \
+            --with-boost="${BOOST_PREFIX}" \
+            BDB_CFLAGS="-I${BDB_PREFIX}/include" \
+            BDB_LIBS="-L${BDB_PREFIX}/lib -ldb_cxx-4.8" \
+            CPPFLAGS="-I${OPENSSL_PREFIX}/include -I${BOOST_PREFIX}/include -I${QRENCODE_PREFIX}/include -I/opt/homebrew/include" \
+            LDFLAGS="-L${OPENSSL_PREFIX}/lib -L${BOOST_PREFIX}/lib -L${QRENCODE_PREFIX}/lib -L/opt/homebrew/lib" \
+            PKG_CONFIG_PATH="${PKG_CONFIG_PATH}" \
+            CXXFLAGS="-O2 -g -std=c++14" \
+            CFLAGS="-O2 -g"
+          make -j"$(sysctl -n hw.ncpu)"
+
+      - name: Package CLI + Qt app
+        run: |
+          set -euo pipefail
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+          export PATH="$(brew --prefix qt@5)/bin:$PATH"
+          mkdir -p dist
+          test -x src/linkcoind
+          test -x src/linkcoin-cli
+          test -x src/linkcoin-tx
+          test -x src/qt/linkcoin-qt
+          cp -f src/linkcoind    dist/linkcoind-macos-arm64
+          cp -f src/linkcoin-cli dist/linkcoin-cli-macos-arm64
+          cp -f src/linkcoin-tx  dist/linkcoin-tx-macos-arm64
+          rm -rf Linkcoin-Qt.app Bitcoin-Qt.app
+          make appbundle
+          APPDIR=Linkcoin-Qt.app
+          EXE="$APPDIR/Contents/MacOS/Linkcoin-Qt"
+          if [ ! -x "$EXE" ]; then
+            echo "ERROR: make appbundle did not produce $EXE"
+            exit 1
+          fi
+          if command -v macdeployqt >/dev/null 2>&1; then
+            macdeployqt "$APPDIR" -verbose=1
+          else
+            echo "ERROR: macdeployqt not found"
+            exit 1
+          fi
+          python3 contrib/macdeploy/bundle-dylibs.py "$APPDIR"
+          BOOST_LIB="$(brew --prefix boost)/lib"
+          FW="$APPDIR/Contents/Frameworks"
+          mkdir -p "$FW"
+          for dep in libboost_atomic.dylib libboost_container.dylib libboost_chrono.dylib \
+                     libboost_system.dylib libboost_filesystem.dylib \
+                     libboost_program_options.dylib libboost_thread.dylib; do
+            if [ -f "$BOOST_LIB/$dep" ] && [ ! -f "$FW/$dep" ]; then
+              cp -f "$BOOST_LIB/$dep" "$FW/"
+              chmod u+w "$FW/$dep"
+              install_name_tool -id "@executable_path/../Frameworks/$dep" "$FW/$dep" || true
+            fi
+          done
+          for f in "$FW"/libboost_*.dylib; do
+            [ -f "$f" ] || continue
+            chmod u+w "$f"
+            otool -L "$f" | awk '/@loader_path\// {print $1}' | while read -r ref; do
+              base="${ref##*/}"
+              if [ -f "$FW/$base" ]; then
+                install_name_tool -change "$ref" \
+                  "@executable_path/../Frameworks/$base" "$f" || true
+              fi
+            done
+          done
+          python3 contrib/macdeploy/bundle-dylibs.py "$APPDIR"
+          codesign --force --deep --sign - "$APPDIR"
+          APP_BYTES=$(du -sk "$APPDIR" | awk '{print $1 * 1024}')
+          EXE_BYTES=$(stat -f%z "$EXE")
+          if [ "$EXE_BYTES" -lt 1000000 ]; then
+            echo "ERROR: executable too small ($EXE_BYTES)"
+            exit 1
+          fi
+          if [ "$APP_BYTES" -lt 10000000 ]; then
+            echo "ERROR: app bundle too small ($APP_BYTES)"
+            exit 1
+          fi
+          set +e
+          VER_OUT="$("$EXE" -version 2>&1)"
+          VER_RC=$?
+          set -e
+          echo "$VER_OUT"
+          if ! echo "$VER_OUT" | grep -Eqi 'Linkcoin Core version|version v?[0-9]'; then
+            echo "ERROR: bundled app failed to print version"
+            exit 1
+          fi
+          APP_ZIP=Linkcoin-Qt-macos-arm64.app.zip
+          ditto -c -k --sequesterRsrc --keepParent "$APPDIR" "$APP_ZIP"
+          ZIP_BYTES=$(stat -f%z "$APP_ZIP")
+          if [ "$ZIP_BYTES" -lt 5000000 ]; then
+            echo "ERROR: zip too small ($ZIP_BYTES)"
+            exit 1
+          fi
+          cp -f "$APP_ZIP" dist/
+          (cd dist && zip -9 ../linkcoin-macos-arm64-cli.zip \
+            linkcoind-macos-arm64 \
+            linkcoin-cli-macos-arm64 \
+            linkcoin-tx-macos-arm64)
+          tar -C dist -czf linkcoin-macos-arm64-cli.tar.gz \
+            linkcoind-macos-arm64 \
+            linkcoin-cli-macos-arm64 \
+            linkcoin-tx-macos-arm64
+          ls -lah dist "$APP_ZIP" linkcoin-macos-arm64-cli.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: |
+            dist/*
+            Linkcoin-Qt-macos-arm64.app.zip
+            linkcoin-macos-arm64-cli.zip
+            linkcoin-macos-arm64-cli.tar.gz
+
+  publish:
+    name: Publish release assets
+    needs: [linux-amd64, linux-arm64, windows, macos]
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'release' || inputs.upload_tag != ''
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "name=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ inputs.upload_tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten and list artifacts
+        run: |
+          mkdir -p upload
+          find artifacts -type f \( \
+            -name 'linkcoin-linux-x86_64.zip' -o \
+            -name 'linkcoin-linux-aarch64.zip' -o \
+            -name 'linkcoin-windows-x86_64.zip' -o \
+            -name 'linkcoin-macos-arm64-cli.zip' -o \
+            -name 'Linkcoin-Qt-macos-arm64.app.zip' \
+          \) -exec cp -f {} upload/ \;
+          echo "=== Release upload set ==="
+          ls -lah upload
+          for req in \
+            linkcoin-linux-x86_64.zip \
+            linkcoin-linux-aarch64.zip \
+            linkcoin-windows-x86_64.zip \
+            linkcoin-macos-arm64-cli.zip \
+            Linkcoin-Qt-macos-arm64.app.zip
+          do
+            if [ ! -f "upload/$req" ]; then
+              echo "ERROR: missing required release asset: $req"
+              find artifacts -type f | sort
+              exit 1
+            fi
+            BYTES=$(stat -c%s "upload/$req")
+            echo "ok $req ($BYTES bytes)"
+            if [ "$BYTES" -lt 100000 ]; then
+              echo "ERROR: $req is suspiciously small ($BYTES)"
+              exit 1
+            fi
+          done
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          files: upload/*
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -85,6 +85,9 @@ public:
     //! Get wallet name.
     virtual std::string getWalletName() = 0;
 
+    //! Set default address type.
+    virtual bool setAddressType(const std::string& type) = 0;
+
     // Get a new address.
     virtual bool getNewDestination(const OutputType type, const std::string label, CTxDestination& dest) = 0;
 

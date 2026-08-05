@@ -64,6 +64,12 @@ public:
     };
 
     const Consensus::Params& GetConsensus() const { return consensus; }
+    const Consensus::Params& GetConsensus(uint32_t nHeight) const { 
+        if (pConsensusRoot) {
+            return *pConsensusRoot->GetConsensus(nHeight);
+        }
+        return consensus;
+    }
     const CMessageHeader::MessageStartChars& MessageStart() const { return pchMessageStart; }
     int GetDefaultPort() const { return nDefaultPort; }
 
@@ -93,10 +99,20 @@ public:
     const std::vector<uint8_t>& FixedSeeds() const { return vFixedSeeds; }
     const CCheckpointData& Checkpoints() const { return checkpointData; }
     const ChainTxData& TxData() const { return chainTxData; }
+    
+    // Development Fund
+    const std::vector<std::string>& GetDevelopmentFundAddress() const { return vDevelopmentFundAddress; }
+    int GetDevelopmentFundStartHeight() const { return vDevelopmentFundStartHeight; }
+    int GetLastDevelopmentFundBlockHeight() const { return vDevelopmentFundLastHeight; }
+    double GetDevelopmentFundPercent() const { return vDevelopmentFundPercent; }
 protected:
-    CChainParams() {}
+    CChainParams() : vDevelopmentFundStartHeight(0), vDevelopmentFundLastHeight(0), vDevelopmentFundPercent(0.0) {}
 
     Consensus::Params consensus;
+    Consensus::Params digishieldConsensus;
+    Consensus::Params auxpowConsensus;
+    Consensus::Params minDifficultyConsensus;
+    const Consensus::Params *pConsensusRoot{nullptr};
     CMessageHeader::MessageStartChars pchMessageStart;
     int nDefaultPort;
     uint64_t nPruneAfterHeight;
@@ -115,6 +131,12 @@ protected:
     bool m_is_mockable_chain;
     CCheckpointData checkpointData;
     ChainTxData chainTxData;
+    
+    // Development Fund
+    std::vector<std::string> vDevelopmentFundAddress;
+    int vDevelopmentFundStartHeight;
+    int vDevelopmentFundLastHeight;
+    double vDevelopmentFundPercent;
 };
 
 /**

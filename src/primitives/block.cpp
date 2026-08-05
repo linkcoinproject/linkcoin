@@ -10,17 +10,41 @@
 #include <util/strencodings.h>
 #include <crypto/common.h>
 #include <crypto/scrypt.h>
+#include <auxpow.h>
+#include <primitives/pureheader.h>
 
 uint256 CBlockHeader::GetHash() const
 {
-    return SerializeHash(*this);
+    // CRITICAL: Only hash the 80-byte header, NOT the auxpow data
+    // The block hash is the hash of the 80-byte header only.
+    // AuxPoW data is additional merge-mining proof, not part of the block's identity.
+    // Including auxpow in the hash would break the blockchain's hash chain:
+    // - Block N+1's hashPrevBlock must equal Hash(Block N's 80-byte header)
+    // - If we include auxpow, the hashes won't match and sync will fail
+    CPureBlockHeader pureHeader;
+    pureHeader.nVersion = nVersion;
+    pureHeader.hashPrevBlock = hashPrevBlock;
+    pureHeader.hashMerkleRoot = hashMerkleRoot;
+    pureHeader.nTime = nTime;
+    pureHeader.nBits = nBits;
+    pureHeader.nNonce = nNonce;
+
+    return SerializeHash(pureHeader);
 }
 
 uint256 CBlockHeader::GetPoWHash() const
 {
-    uint256 thash;
-    scrypt_1024_1_1_256(BEGIN(nVersion), BEGIN(thash));
-    return thash;
+    // Create a CPureBlockHeader for PoW hashing
+    // CBlockHeader contains shared_ptr which breaks POD layout
+    CPureBlockHeader pureHeader;
+    pureHeader.nVersion = nVersion;
+    pureHeader.hashPrevBlock = hashPrevBlock;
+    pureHeader.hashMerkleRoot = hashMerkleRoot;
+    pureHeader.nTime = nTime;
+    pureHeader.nBits = nBits;
+    pureHeader.nNonce = nNonce;
+    
+    return pureHeader.GetPoWHash();
 }
 
 std::string CBlock::ToString() const

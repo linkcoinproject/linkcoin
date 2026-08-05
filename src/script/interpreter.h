@@ -139,6 +139,9 @@ enum
 
     // Making unknown public key versions (in BIP 342 scripts) non-standard
     SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE = (1U << 20),
+
+    // Re-enable legacy disabled opcodes (OP_CAT, OP_MUL, etc.)
+    SCRIPT_VERIFY_DISABLED_OPCODES_REENABLED = (1U << 21),
 };
 
 bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, unsigned int flags, ScriptError* serror);

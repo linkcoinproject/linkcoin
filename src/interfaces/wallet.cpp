@@ -7,6 +7,7 @@
 #include <amount.h>
 #include <interfaces/chain.h>
 #include <interfaces/handler.h>
+#include <outputtype.h>
 #include <policy/fees.h>
 #include <primitives/transaction.h>
 #include <rpc/server.h>
@@ -183,6 +184,16 @@ public:
     void abortRescan() override { m_wallet->AbortRescan(); }
     bool backupWallet(const std::string& filename) override { return m_wallet->BackupWallet(filename); }
     std::string getWalletName() override { return m_wallet->GetName(); }
+    bool setAddressType(const std::string& type) override
+    {
+        OutputType output_type;
+        if (!ParseOutputType(type, output_type)) {
+            return false;
+        }
+        m_wallet->m_default_address_type = output_type;
+        m_wallet->m_default_change_type = output_type;
+        return true;
+    }
     bool getNewDestination(const OutputType type, const std::string label, CTxDestination& dest) override
     {
         LOCK(m_wallet->cs_wallet);

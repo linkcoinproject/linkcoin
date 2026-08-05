@@ -252,10 +252,16 @@ void CreateWalletActivity::createWallet()
         flags |= WALLET_FLAG_DESCRIPTORS;
     }
 
-    QTimer::singleShot(500, worker(), [this, name, flags] {
+    QString address_type = m_create_wallet_dialog->getAddressType();
+
+    QTimer::singleShot(500, worker(), [this, name, flags, address_type] {
         std::unique_ptr<interfaces::Wallet> wallet = node().walletClient().createWallet(name, m_passphrase, flags, m_error_message, m_warning_message);
 
-        if (wallet) m_wallet_model = m_wallet_controller->getOrCreateWallet(std::move(wallet));
+        if (wallet) {
+            // Set the default address type for the wallet
+            wallet->setAddressType(address_type.toStdString());
+            m_wallet_model = m_wallet_controller->getOrCreateWallet(std::move(wallet));
+        }
 
         QTimer::singleShot(500, this, &CreateWalletActivity::finish);
     });

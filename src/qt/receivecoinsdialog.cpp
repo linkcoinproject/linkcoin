@@ -2,6 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <chainparams.h>
+#include <interfaces/node.h>
 #include <wallet/wallet.h>
 
 #include <qt/receivecoinsdialog.h>
@@ -62,9 +64,6 @@ ReceiveCoinsDialog::ReceiveCoinsDialog(const PlatformStyle *_platformStyle, QWid
     connect(copyAmountAction, &QAction::triggered, this, &ReceiveCoinsDialog::copyAmount);
 
     connect(ui->clearButton, &QPushButton::clicked, this, &ReceiveCoinsDialog::clear);
-
-    connect(ui->useBech32, &QCheckBox::clicked, this, &ReceiveCoinsDialog::useBech32Clicked);
-    connect(ui->useMWEB, &QCheckBox::clicked, this, &ReceiveCoinsDialog::useMWEBClicked);
 }
 
 void ReceiveCoinsDialog::setModel(WalletModel *_model)
@@ -95,11 +94,28 @@ void ReceiveCoinsDialog::setModel(WalletModel *_model)
         // Last 2 columns are set by the columnResizingFixer, when the table geometry is ready.
         columnResizingFixer = new GUIUtil::TableViewLastColumnResizingFixer(tableView, AMOUNT_MINIMUM_COLUMN_WIDTH, DATE_COLUMN_WIDTH, this);
 
-        if (model->wallet().getDefaultAddressType() == OutputType::BECH32) {
-            ui->useBech32->setCheckState(Qt::Checked);
-        } else {
-            ui->useBech32->setCheckState(Qt::Unchecked);
+        // Setup address type combo box
+        // Junkcoin: Only show address types that are activated
+        const int currentHeight = _model->node().getNumBlocks();
+        const Consensus::Params& consensus = Params().GetConsensus();
+        
+        ui->addressTypeCombo->addItem(tr("Default (Wallet Setting)"), -1);
+        ui->addressTypeCombo->addItem(tr("Legacy (P2PKH)"), static_cast<int>(OutputType::LEGACY));
+        
+        // Only show SegWit options if activated
+        if (currentHeight >= consensus.SegwitHeight) {
+            ui->addressTypeCombo->addItem(tr("SegWit (Bech32)"), static_cast<int>(OutputType::BECH32));
+            ui->addressTypeCombo->addItem(tr("Wrapped SegWit (P2SH)"), static_cast<int>(OutputType::P2SH_SEGWIT));
         }
+        
+        // Note: Taproot (BECH32M) not supported - OutputType doesn't have BECH32M
+        
+        // Only show MWEB option if activated
+        if (currentHeight >= consensus.MWEBHeight) {
+            ui->addressTypeCombo->addItem(tr("MWEB (Privacy)"), static_cast<int>(OutputType::MWEB));
+        }
+        
+        ui->addressTypeCombo->setCurrentIndex(0); // Default to wallet setting
 
         // Set the button to be enabled or disabled based on whether the wallet can give out new addresses.
         ui->receiveButton->setEnabled(model->wallet().canGetAddresses());
@@ -151,16 +167,16 @@ void ReceiveCoinsDialog::on_receiveButton_clicked()
     QString label = ui->reqLabel->text();
     /* Generate new receiving address */
     OutputType address_type;
-    if (ui->useBech32->isChecked()) {
-        address_type = OutputType::BECH32;
-    } else if (ui->useMWEB->isChecked()) {
-        address_type = OutputType::MWEB;
-    } else {
+    
+    int selected_type = ui->addressTypeCombo->currentData().toInt();
+    if (selected_type == -1) {
+        // Use wallet default
         address_type = model->wallet().getDefaultAddressType();
-        if (address_type == OutputType::BECH32) {
-            address_type = OutputType::P2SH_SEGWIT;
-        }
+    } else {
+        // Use selected type
+        address_type = static_cast<OutputType>(selected_type);
     }
+    
     address = model->getAddressTableModel()->addRow(AddressTableModel::Receive, label, "", address_type);
 
     switch(model->getAddressTableModel()->getEditStatus())
@@ -311,14 +327,4 @@ void ReceiveCoinsDialog::copyMessage()
 void ReceiveCoinsDialog::copyAmount()
 {
     copyColumnToClipboard(RecentRequestsTableModel::Amount);
-}
-
-void ReceiveCoinsDialog::useBech32Clicked()
-{
-    ui->useMWEB->setChecked(false);
-}
-
-void ReceiveCoinsDialog::useMWEBClicked()
-{
-    ui->useBech32->setChecked(false);
 }

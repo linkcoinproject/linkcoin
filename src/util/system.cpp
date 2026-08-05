@@ -71,7 +71,7 @@
 // Application startup time (used for uptime calculation)
 const int64_t nStartupTime = GetTime();
 
-const char * const BITCOIN_CONF_FILENAME = "litecoin.conf";
+const char * const BITCOIN_CONF_FILENAME = "linkcoin.conf";
 const char * const BITCOIN_SETTINGS_FILENAME = "settings.json";
 
 ArgsManager gArgs;
@@ -631,7 +631,7 @@ static std::string FormatException(const std::exception* pex, const char* pszThr
     char pszModule[MAX_PATH] = "";
     GetModuleFileNameA(nullptr, pszModule, sizeof(pszModule));
 #else
-    const char* pszModule = "litecoin";
+    const char* pszModule = "linkcoin";
 #endif
     if (pex)
         return strprintf(
@@ -655,7 +655,7 @@ fs::path GetDefaultDataDir()
     // Unix-like: ~/.bitcoin
 #ifdef WIN32
     // Windows
-    return GetSpecialFolderPath(CSIDL_APPDATA) / "Litecoin";
+    return GetSpecialFolderPath(CSIDL_APPDATA) / "Linkcoin";
 #else
     fs::path pathRet;
     char* pszHome = getenv("HOME");
@@ -665,10 +665,10 @@ fs::path GetDefaultDataDir()
         pathRet = fs::path(pszHome);
 #ifdef MAC_OSX
     // macOS
-    return pathRet / "Library/Application Support/Litecoin";
+    return pathRet / "Library/Application Support/Linkcoin";
 #else
     // Unix-like
-    return pathRet / ".litecoin";
+    return pathRet / ".linkcoin";
 #endif
 #endif
 }
@@ -1284,14 +1284,13 @@ std::string CopyrightHolders(const std::string& strPrefix)
     const auto copyright_devs = strprintf(_(COPYRIGHT_HOLDERS).translated, COPYRIGHT_HOLDERS_SUBSTITUTION);
     std::string strCopyrightHolders = strPrefix + copyright_devs;
 
-    // Make sure Bitcoin Core copyright is not removed by accident
-    if (copyright_devs.find("Bitcoin Core") == std::string::npos) {
-        if (strPrefix.find("2011") != std::string::npos) {
-            std::string strYear = strPrefix;
-            strYear.replace(strYear.find("2011"), sizeof("2011")-1, "2009");
-            strCopyrightHolders += "\n" + strYear + "The Bitcoin Core developers";
-        }
-    }
+    // Credit upstream projects
+    const std::string litecoinLine = strprintf(_("Copyright (C) %i-%i").translated, 2011, COPYRIGHT_YEAR) + " " + _("The Litecoin Core developers").translated;
+    strCopyrightHolders += "\n" + litecoinLine;
+
+    const std::string bitcoinLine = strprintf(_("Copyright (C) %i-%i").translated, 2009, COPYRIGHT_YEAR) + " " + _("The Bitcoin Core developers").translated;
+    strCopyrightHolders += "\n" + bitcoinLine;
+
     return strCopyrightHolders;
 }
 

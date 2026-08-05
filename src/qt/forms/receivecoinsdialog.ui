@@ -47,7 +47,7 @@
         <item row="6" column="0">
          <widget class="QLabel" name="label_3">
           <property name="toolTip">
-           <string>An optional message to attach to the payment request, which will be displayed when the request is opened. Note: The message will not be sent with the payment over the Litecoin network.</string>
+           <string>An optional message to attach to the payment request, which will be displayed when the request is opened. Note: The message will not be sent with the payment over the Junkcoin network.</string>
           </property>
           <property name="text">
            <string>&amp;Message:</string>
@@ -195,36 +195,22 @@
            </widget>
           </item>
           <item>
-           <widget class="QCheckBox" name="useBech32">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>1000</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="focusPolicy">
-             <enum>Qt::StrongFocus</enum>
-            </property>
-            <property name="toolTip">
-             <string>Native segwit addresses (aka Bech32 or BIP-173) reduce your transaction fees later on and offer better protection against typos, but old wallets don't support them. When unchecked, an address compatible with older wallets will be created instead.</string>
-            </property>
-            <property name="text">
-             <string>Generate native segwit (Bech32) address</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QCheckBox" name="useMWEB">
-            <property name="text">
-             <string>Generate MWEB address</string>
-            </property>
-           </widget>
+           <layout class="QHBoxLayout" name="addressTypeLayout">
+            <item>
+             <widget class="QLabel" name="addressTypeLabel">
+              <property name="text">
+               <string>Address Type:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="addressTypeCombo">
+              <property name="toolTip">
+               <string>Select the address type to generate. Default uses the wallet's default address type.</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </item>
           <item>
            <spacer name="horizontalSpacer_3">
@@ -373,7 +359,7 @@
  <tabstops>
   <tabstop>reqLabel</tabstop>
   <tabstop>reqAmount</tabstop>
-  <tabstop>useBech32</tabstop>
+  <tabstop>addressTypeCombo</tabstop>
   <tabstop>reqMessage</tabstop>
   <tabstop>receiveButton</tabstop>
   <tabstop>clearButton</tabstop>

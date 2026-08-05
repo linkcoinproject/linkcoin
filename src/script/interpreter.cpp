@@ -478,22 +478,25 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                 }
             }
 
-            if (opcode == OP_CAT ||
-                opcode == OP_SUBSTR ||
-                opcode == OP_LEFT ||
-                opcode == OP_RIGHT ||
-                opcode == OP_INVERT ||
-                opcode == OP_AND ||
-                opcode == OP_OR ||
-                opcode == OP_XOR ||
-                opcode == OP_2MUL ||
-                opcode == OP_2DIV ||
-                opcode == OP_MUL ||
-                opcode == OP_DIV ||
-                opcode == OP_MOD ||
-                opcode == OP_LSHIFT ||
-                opcode == OP_RSHIFT)
-                return set_error(serror, SCRIPT_ERR_DISABLED_OPCODE); // Disabled opcodes (CVE-2010-5137).
+            // Linkcoin: Check if legacy disabled opcodes are re-enabled via consensus flag
+            if (!(flags & SCRIPT_VERIFY_DISABLED_OPCODES_REENABLED)) {
+                if (opcode == OP_CAT ||
+                    opcode == OP_SUBSTR ||
+                    opcode == OP_LEFT ||
+                    opcode == OP_RIGHT ||
+                    opcode == OP_INVERT ||
+                    opcode == OP_AND ||
+                    opcode == OP_OR ||
+                    opcode == OP_XOR ||
+                    opcode == OP_2MUL ||
+                    opcode == OP_2DIV ||
+                    opcode == OP_MUL ||
+                    opcode == OP_DIV ||
+                    opcode == OP_MOD ||
+                    opcode == OP_LSHIFT ||
+                    opcode == OP_RSHIFT)
+                    return set_error(serror, SCRIPT_ERR_DISABLED_OPCODE); // Disabled opcodes (CVE-2010-5137).
+            }
 
             // With SCRIPT_VERIFY_CONST_SCRIPTCODE, OP_CODESEPARATOR in non-segwit script is rejected even in an unexecuted branch
             if (opcode == OP_CODESEPARATOR && sigversion == SigVersion::BASE && (flags & SCRIPT_VERIFY_CONST_SCRIPTCODE))
@@ -906,6 +909,135 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
 
 
                 //
+                // Splice ops
+                //
+                case OP_CAT:
+                {
+                    // (x1 x2 -- x1|x2)
+                    // Concatenate two stack elements
+                    if (stack.size() < 2)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    valtype& vch1 = stacktop(-2);
+                    valtype& vch2 = stacktop(-1);
+                    if (vch1.size() + vch2.size() > MAX_SCRIPT_ELEMENT_SIZE)
+                        return set_error(serror, SCRIPT_ERR_PUSH_SIZE);
+                    vch1.insert(vch1.end(), vch2.begin(), vch2.end());
+                    popstack(stack);
+                }
+                break;
+
+                case OP_SUBSTR:
+                {
+                    // (in begin size -- out)
+                    if (stack.size() < 3)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    valtype& vch = stacktop(-3);
+                    int nBegin = CScriptNum(stacktop(-2), fRequireMinimal).getint();
+                    int nSize = CScriptNum(stacktop(-1), fRequireMinimal).getint();
+                    if (nBegin < 0 || nSize < 0)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    if ((unsigned int)(nBegin + nSize) > vch.size())
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    vch = valtype(vch.begin() + nBegin, vch.begin() + nBegin + nSize);
+                    popstack(stack);
+                    popstack(stack);
+                }
+                break;
+
+                case OP_LEFT:
+                {
+                    // (in size -- out)
+                    if (stack.size() < 2)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    valtype& vch = stacktop(-2);
+                    int nSize = CScriptNum(stacktop(-1), fRequireMinimal).getint();
+                    if (nSize < 0)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    if ((unsigned int)nSize > vch.size())
+                        nSize = vch.size();
+                    vch = valtype(vch.begin(), vch.begin() + nSize);
+                    popstack(stack);
+                }
+                break;
+
+                case OP_RIGHT:
+                {
+                    // (in size -- out)
+                    if (stack.size() < 2)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    valtype& vch = stacktop(-2);
+                    int nSize = CScriptNum(stacktop(-1), fRequireMinimal).getint();
+                    if (nSize < 0)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    if ((unsigned int)nSize > vch.size())
+                        nSize = vch.size();
+                    vch = valtype(vch.end() - nSize, vch.end());
+                    popstack(stack);
+                }
+                break;
+
+
+                //
+                // Bitwise logic
+                //
+                case OP_INVERT:
+                {
+                    // (in -- out)
+                    if (stack.size() < 1)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    valtype& vch = stacktop(-1);
+                    for (unsigned int i = 0; i < vch.size(); i++)
+                        vch[i] = ~vch[i];
+                }
+                break;
+
+                case OP_AND:
+                {
+                    // (x1 x2 -- out)
+                    if (stack.size() < 2)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    valtype& vch1 = stacktop(-2);
+                    valtype& vch2 = stacktop(-1);
+                    if (vch1.size() != vch2.size())
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    for (unsigned int i = 0; i < vch1.size(); i++)
+                        vch1[i] &= vch2[i];
+                    popstack(stack);
+                }
+                break;
+
+                case OP_OR:
+                {
+                    // (x1 x2 -- out)
+                    if (stack.size() < 2)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    valtype& vch1 = stacktop(-2);
+                    valtype& vch2 = stacktop(-1);
+                    if (vch1.size() != vch2.size())
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    for (unsigned int i = 0; i < vch1.size(); i++)
+                        vch1[i] |= vch2[i];
+                    popstack(stack);
+                }
+                break;
+
+                case OP_XOR:
+                {
+                    // (x1 x2 -- out)
+                    if (stack.size() < 2)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    valtype& vch1 = stacktop(-2);
+                    valtype& vch2 = stacktop(-1);
+                    if (vch1.size() != vch2.size())
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    for (unsigned int i = 0; i < vch1.size(); i++)
+                        vch1[i] ^= vch2[i];
+                    popstack(stack);
+                }
+                break;
+
+
+                //
                 // Bitwise logic
                 //
                 case OP_EQUAL:
@@ -942,6 +1074,8 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                 //
                 case OP_1ADD:
                 case OP_1SUB:
+                case OP_2MUL:
+                case OP_2DIV:
                 case OP_NEGATE:
                 case OP_ABS:
                 case OP_NOT:
@@ -955,6 +1089,8 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                     {
                     case OP_1ADD:       bn += bnOne; break;
                     case OP_1SUB:       bn -= bnOne; break;
+                    case OP_2MUL:       bn = CScriptNum(bn.getint() * 2); break;
+                    case OP_2DIV:       bn = CScriptNum(bn.getint() / 2); break;
                     case OP_NEGATE:     bn = -bn; break;
                     case OP_ABS:        if (bn < bnZero) bn = -bn; break;
                     case OP_NOT:        bn = (bn == bnZero); break;
@@ -968,6 +1104,11 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
 
                 case OP_ADD:
                 case OP_SUB:
+                case OP_MUL:
+                case OP_DIV:
+                case OP_MOD:
+                case OP_LSHIFT:
+                case OP_RSHIFT:
                 case OP_BOOLAND:
                 case OP_BOOLOR:
                 case OP_NUMEQUAL:
@@ -994,6 +1135,34 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
 
                     case OP_SUB:
                         bn = bn1 - bn2;
+                        break;
+
+                    case OP_MUL:
+                        bn = CScriptNum(bn1.getint() * bn2.getint());
+                        break;
+
+                    case OP_DIV:
+                        if (bn2 == bnZero)
+                            return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                        bn = CScriptNum(bn1.getint() / bn2.getint());
+                        break;
+
+                    case OP_MOD:
+                        if (bn2 == bnZero)
+                            return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                        bn = CScriptNum(bn1.getint() % bn2.getint());
+                        break;
+
+                    case OP_LSHIFT:
+                        if (bn2 < bnZero || bn2.getint() >= 32)
+                            return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                        bn = CScriptNum(bn1.getint() << bn2.getint());
+                        break;
+
+                    case OP_RSHIFT:
+                        if (bn2 < bnZero || bn2.getint() >= 32)
+                            return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                        bn = CScriptNum(bn1.getint() >> bn2.getint());
                         break;
 
                     case OP_BOOLAND:             bn = (bn1 != bnZero && bn2 != bnZero); break;

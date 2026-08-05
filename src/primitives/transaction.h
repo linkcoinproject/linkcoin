@@ -25,6 +25,7 @@
  */
 static const int SERIALIZE_TRANSACTION_NO_WITNESS = 0x40000000;
 static const int SERIALIZE_NO_MWEB = 0x20000000;
+static const int SERIALIZE_NO_AUXPOW = 0x10000000;
 
 /** An outpoint - a combination of a transaction hash and an index n into its vout */
 class COutPoint
