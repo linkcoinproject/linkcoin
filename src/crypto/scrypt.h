@@ -3,9 +3,6 @@
 
 #include <stdlib.h>
 #include <stdint.h>
-#if defined(__APPLE__)
-#include <sys/endian.h>
-#endif
 
 static const int SCRYPT_SCRATCHPAD_SIZE = 131072 + 63;
 
