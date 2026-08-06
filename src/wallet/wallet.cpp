@@ -3370,7 +3370,7 @@ bool CWallet::GetNewDestination(const OutputType type, const std::string label, 
     LOCK(cs_wallet);
     error.clear();
 
-    // Junkcoin: Check feature activation before creating addresses
+    // Linkcoin: Check feature activation before creating addresses
     // This prevents creating anyone-can-spend outputs before features are activated
     const int currentHeight = GetLastBlockHeight();
     const Consensus::Params& consensus = Params().GetConsensus();
@@ -3414,7 +3414,7 @@ bool CWallet::GetNewChangeDestination(const OutputType type, CTxDestination& des
     LOCK(cs_wallet);
     error.clear();
 
-    // Junkcoin: Check feature activation before creating change addresses
+    // Linkcoin: Check feature activation before creating change addresses
     // This prevents creating anyone-can-spend outputs before features are activated
     const int currentHeight = GetLastBlockHeight();
     const Consensus::Params& consensus = Params().GetConsensus();

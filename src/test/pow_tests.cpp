@@ -11,11 +11,11 @@
 
 BOOST_FIXTURE_TEST_SUITE(pow_tests, BasicTestingSetup)
 
-// Junkcoin uses a 1-day (nPowTargetTimespan) retarget window with the standard
+// Linkcoin uses a 1-day (nPowTargetTimespan) retarget window with the standard
 // Litecoin clamp: the measured timespan is bounded to [timespan/4, timespan*4],
 // so difficulty can change by at most a factor of 4 per retarget, and the target
 // is capped at powLimit. The scenarios below drive each of those bounds using
-// Junkcoin's own parameters (the previous vectors were inherited Litecoin
+// Linkcoin's own parameters (the previous vectors were inherited Litecoin
 // known-answers and assumed Litecoin's 3.5-day window).
 
 /* On-target retarget leaves difficulty unchanged */
@@ -166,7 +166,7 @@ void sanity_check_chainparams(const ArgsManager& args, std::string chainName)
     BOOST_CHECK(UintToArith256(consensus.powLimit) >= pow_compact);
 
     // check max target * 4*nPowTargetTimespan doesn't overflow -- see pow.cpp:CalculateNextWorkRequired()
-    /* Junkcoin: we allow overflowing by 1 bit
+    /* Linkcoin: we allow overflowing by 1 bit
     if (!consensus.fPowNoRetargeting) {
         arith_uint256 targ_max("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
         targ_max /= consensus.nPowTargetTimespan*4;

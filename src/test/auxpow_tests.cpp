@@ -6,7 +6,7 @@
 #include <chainparams.h>
 #include <coins.h>
 #include <consensus/merkle.h>
-#include <junkcoin.h>
+#include <linkcoin.h>
 #include <primitives/block.h>
 #include <script/script.h>
 #include <uint256.h>
@@ -378,7 +378,7 @@ BOOST_AUTO_TEST_CASE(auxpow_pow)
     mineBlock(block, true, params);
     BOOST_CHECK(CheckAuxPowProofOfWork(block, params));
 
-    // Junkcoin block version 2 can be both AuxPoW and regular, so test 3
+    // Linkcoin block version 2 can be both AuxPoW and regular, so test 3
 
     block.nVersion = 3;
     mineBlock(block, true, params);

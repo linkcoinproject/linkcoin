@@ -5,7 +5,7 @@
 #include <arith_uint256.h>
 #include <chainparams.h>
 #include <chainparamsbase.h>
-#include <junkcoin.h>
+#include <linkcoin.h>
 #include <primitives/block.h>
 #include <test/util/setup_common.h>
 

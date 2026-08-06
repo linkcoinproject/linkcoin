@@ -42,12 +42,12 @@ static const int TOOLTIP_WRAP_THRESHOLD = 80;
 /* Number of frames in spinner animation */
 #define SPINNER_FRAMES 36
 
-#define QAPP_ORG_NAME "Junkcoin"
-#define QAPP_ORG_DOMAIN "junk-coin.com"
-#define QAPP_APP_NAME_DEFAULT "Junkcoin-Qt"
-#define QAPP_APP_NAME_TESTNET "Liteocin-Qt-testnet"
-#define QAPP_APP_NAME_SIGNET "Junkcoin-Qt-signet"
-#define QAPP_APP_NAME_REGTEST "Junkcoin-Qt-regtest"
+#define QAPP_ORG_NAME "Linkcoin"
+#define QAPP_ORG_DOMAIN "linkcoin.org"
+#define QAPP_APP_NAME_DEFAULT "Linkcoin-Qt"
+#define QAPP_APP_NAME_TESTNET "Linkcoin-Qt-testnet"
+#define QAPP_APP_NAME_SIGNET "Linkcoin-Qt-signet"
+#define QAPP_APP_NAME_REGTEST "Linkcoin-Qt-regtest"
 
 /* One gigabyte (GB) in bytes */
 static constexpr uint64_t GB_BYTES{1000000000};

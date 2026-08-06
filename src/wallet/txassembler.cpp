@@ -143,7 +143,7 @@ void TxAssembler::CreateTransaction_Locked(
         new_tx.mweb_type = MWEB::GetTxType(new_tx.recipients, new_tx.selected_coins);
 
         // We already created an output for each non-MWEB recipient, but for pegout transactions,
-        // the recipients are funded through the pegout kernel instead of traditional JKC outputs.
+        // the recipients are funded through the pegout kernel instead of traditional LNC outputs.
         if (new_tx.mweb_type == MWEB::TxType::PEGOUT) {
             new_tx.tx.vout.clear();
         }
@@ -161,7 +161,7 @@ void TxAssembler::CreateTransaction_Locked(
         // Adds in a change output if there's enough leftover to create one
         AddChangeOutput(new_tx, new_tx.value_selected - amount_needed);
 
-        // Calculate transaction size and the total necessary fee amount (includes JKC and MWEB fees)
+        // Calculate transaction size and the total necessary fee amount (includes LNC and MWEB fees)
         new_tx.bytes = CalculateMaximumTxSize(new_tx);
         new_tx.fee_needed = new_tx.coin_selection_params.m_effective_feerate.GetTotalFee(new_tx.bytes, new_tx.mweb_weight);
 
@@ -232,7 +232,7 @@ void TxAssembler::VerifyRecipients(const std::vector<CRecipient>& recipients)
         throw CreateTxError(_("Transaction must have at least one recipient"));
     }
 
-    // Junkcoin: Get current height and consensus params for activation checks
+    // Linkcoin: Get current height and consensus params for activation checks
     const int currentHeight = m_wallet.GetLastBlockHeight();
     const Consensus::Params& consensus = Params().GetConsensus();
 
@@ -242,7 +242,7 @@ void TxAssembler::VerifyRecipients(const std::vector<CRecipient>& recipients)
             throw CreateTxError(_("Only one MWEB recipient supported at this time"));
         }
 
-        // Junkcoin: Check MWEB activation
+        // Linkcoin: Check MWEB activation
         if (recipient.IsMWEB() && currentHeight < consensus.MWEBHeight) {
             throw CreateTxError(strprintf(
                 _("Cannot send to MWEB addresses until block %d (current: %d). "
@@ -250,7 +250,7 @@ void TxAssembler::VerifyRecipients(const std::vector<CRecipient>& recipients)
                 consensus.MWEBHeight, currentHeight));
         }
 
-        // Junkcoin: Check SegWit/Taproot activation for witness programs
+        // Linkcoin: Check SegWit/Taproot activation for witness programs
         if (!recipient.IsMWEB()) {
             int witnessversion = 0;
             std::vector<unsigned char> witnessprogram;
@@ -459,7 +459,7 @@ bool TxAssembler::AttemptCoinSelection(InProcessTx& new_tx, const CAmount& nTarg
             return std::any_of(new_tx.selected_coins.cbegin(), new_tx.selected_coins.cend(), is_ltc);
         }
     } else {
-        // First try to construct a JKC-to-JKC transaction
+        // First try to construct a LNC-to-LNC transaction
         CoinSelectionParams mweb_to_mweb = new_tx.coin_selection_params;
         mweb_to_mweb.input_preference = InputPreference::LTC_ONLY;
         mweb_to_mweb.mweb_change_output_weight = 0;
@@ -474,7 +474,7 @@ bool TxAssembler::AttemptCoinSelection(InProcessTx& new_tx, const CAmount& nTarg
             return false;
         }
 
-        // If JKC-to-JKC fails, create a peg-out transaction
+        // If LNC-to-LNC fails, create a peg-out transaction
         CoinSelectionParams params_pegout = new_tx.coin_selection_params;
         params_pegout.input_preference = InputPreference::ANY;
         params_pegout.mweb_change_output_weight = mw::STANDARD_OUTPUT_WEIGHT;

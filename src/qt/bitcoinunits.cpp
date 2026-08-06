@@ -42,10 +42,10 @@ QString BitcoinUnits::longName(int unit)
 {
     switch(unit)
     {
-    case BTC: return QString("JKC");
-    case mBTC: return QString("junks");
-    case uBTC: return QString("shreds");
-    case SAT: return QString("junkoshi");
+    case BTC: return QString("LNC");
+    case mBTC: return QString("mLNC");
+    case uBTC: return QString::fromUtf8("μLNC");
+    case SAT: return QString("sat");
     default: return QString("???");
     }
 }
@@ -64,10 +64,10 @@ QString BitcoinUnits::description(int unit)
 {
     switch(unit)
     {
-    case BTC: return QString("Junkcoins");
-    case mBTC: return QString("Junks (1 / 1" THIN_SP_UTF8 "000)");
-    case uBTC: return QString("Shreds (1 / 1" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
-    case SAT: return QString("Junkoshis (sat) (1 / 100" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
+    case BTC: return QString("Linkcoins");
+    case mBTC: return QString("Milli-Linkcoins (1 / 1" THIN_SP_UTF8 "000)");
+    case uBTC: return QString("Micro-Linkcoins (1 / 1" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
+    case SAT: return QString("Satoshis (sat) (1 / 100" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
     default: return QString("???");
     }
 }

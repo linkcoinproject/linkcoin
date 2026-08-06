@@ -105,7 +105,7 @@ struct CoinEligibilityFilter
 };
 
 enum class InputPreference {
-    // Use JKC and MWEB inputs (MIXED)
+    // Use LNC and MWEB inputs (MIXED)
     ANY,
     // Only use MWEB inputs (used when explicitly pegging-out)
     MWEB_ONLY,

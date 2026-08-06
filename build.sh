@@ -1,11 +1,11 @@
 #!/bin/bash
-# Junkcoin Core v2 Build Script
-# This script builds junkcoin-core-v2 using system libraries
+# Linkcoin Core v2 Build Script
+# This script builds linkcoin-core-v2 using system libraries
 
 set -e  # Exit on error
 
 echo "========================================="
-echo "Junkcoin Core v2 Build Script"
+echo "Linkcoin Core v2 Build Script"
 echo "========================================="
 echo ""
 
@@ -30,7 +30,7 @@ print_error() {
 
 # Check if we're in the right directory
 if [ ! -f "configure.ac" ]; then
-    print_error "configure.ac not found. Please run this script from junkcoin-core-v2 directory"
+    print_error "configure.ac not found. Please run this script from linkcoin-core-v2 directory"
     exit 1
 fi
 
@@ -57,7 +57,7 @@ print_info "Using system libraries (not depends)"
     CFLAGS="-O2 -g"
 
 # Step 4: Build
-print_info "Building junkcoin-core-v2..."
+print_info "Building linkcoin-core-v2..."
 print_info "This may take 10-30 minutes depending on your system..."
 
 # Get number of CPU cores
@@ -67,16 +67,16 @@ print_info "Using $CORES CPU cores for parallel build"
 make -j$CORES
 
 # Step 5: Check if build was successful
-if [ -f "src/junkcoind" ] && [ -f "src/junkcoin-cli" ]; then
+if [ -f "src/linkcoind" ] && [ -f "src/linkcoin-cli" ]; then
     print_info "========================================="
     print_info "Build completed successfully!"
     print_info "========================================="
     echo ""
     print_info "Binaries created:"
-    echo "  - src/junkcoind       (daemon)"
-    echo "  - src/junkcoin-cli    (CLI tool)"
-    echo "  - src/junkcoin-tx     (transaction tool)"
-    echo "  - src/junkcoin-wallet (wallet tool)"
+    echo "  - src/linkcoind       (daemon)"
+    echo "  - src/linkcoin-cli    (CLI tool)"
+    echo "  - src/linkcoin-tx     (transaction tool)"
+    echo "  - src/linkcoin-wallet (wallet tool)"
     echo ""
     print_info "To install system-wide, run: sudo make install"
     echo ""

@@ -507,7 +507,7 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
                         return false;
                     }
                     // Accept external (0), internal (1), legacy MWEB (3), and current MWEB (100).
-                    // Legacy wallets (and some pre-standard Junkcoin builds) stored MWEB-related
+                    // Legacy wallets (and some pre-standard Linkcoin builds) stored MWEB-related
                     // keymeta under m/0'/3'/i' rather than m/0'/100'/i' or the x/i form.
                     if (path[1] != 0x80000000 && path[1] != (1 | 0x80000000)
                         && path[1] != (3 | 0x80000000) && path[1] != (100 | 0x80000000)) {

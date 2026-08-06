@@ -108,7 +108,7 @@ struct FeeCalculation;
 enum class FeeEstimateMode;
 
 //! Default for -addresstype
-// Junkcoin: Use LEGACY until SegWit activates at block 700000
+// Linkcoin: Use LEGACY until SegWit activates at block 700000
 constexpr OutputType DEFAULT_ADDRESS_TYPE{OutputType::LEGACY};
 
 static constexpr uint64_t KNOWN_WALLET_FLAGS =

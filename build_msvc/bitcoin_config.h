@@ -27,10 +27,10 @@
 #define COPYRIGHT_HOLDERS "The %s developers"
 
 /* Copyright holder(s) */
-#define COPYRIGHT_HOLDERS_FINAL "The Junkcoin Core developers"
+#define COPYRIGHT_HOLDERS_FINAL "The Linkcoin Core developers"
 
 /* Replacement for %s in copyright holders string */
-#define COPYRIGHT_HOLDERS_SUBSTITUTION "Junkcoin Core"
+#define COPYRIGHT_HOLDERS_SUBSTITUTION "Linkcoin Core"
 
 /* Copyright year */
 #define COPYRIGHT_YEAR 2024
@@ -247,22 +247,22 @@
 #define LT_OBJDIR ".libs/"
 
 /* Define to the address where bug reports for this package should be sent. */
-#define PACKAGE_BUGREPORT "https://github.com/Junkcoin-Foundation/junkcoin/issues"
+#define PACKAGE_BUGREPORT "https://github.com/linkcoin/linkcoin/issues"
 
 /* Define to the full name of this package. */
-#define PACKAGE_NAME "Junkcoin Core"
+#define PACKAGE_NAME "Linkcoin Core"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "Junkcoin Core 4.0.0"
+#define PACKAGE_STRING "Linkcoin Core 2.0.0"
 
 /* Define to the one symbol short name of this package. */
-#define PACKAGE_TARNAME "junkcoin"
+#define PACKAGE_TARNAME "linkcoin"
 
 /* Define to the home page for this package. */
-#define PACKAGE_URL "https://junk-coin.com/"
+#define PACKAGE_URL "https://linkcoin.org/"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "4.0.0"
+#define PACKAGE_VERSION "2.0.0"
 
 /* Define to necessary symbol if this constant uses a non-standard name on
    your system. */

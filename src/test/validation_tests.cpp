@@ -13,10 +13,10 @@
 
 BOOST_FIXTURE_TEST_SUITE(validation_tests, TestingSetup)
 
-// Junkcoin does not use Bitcoin/Litecoin's halving model. It emits a fixed,
-// custom step schedule (see GetJunkcoinBlockSubsidy in junkcoin.cpp), on top of
+// Linkcoin does not use Bitcoin/Litecoin's halving model. It emits a fixed,
+// custom step schedule (see GetLinkcoinBlockSubsidy in linkcoin.cpp), on top of
 // which a deterministic per-height random bonus may either set the reward to
-// 1000 JKC or triple it. This reference reproduces the *base* mainnet schedule
+// 1000 LNC or triple it. This reference reproduces the *base* mainnet schedule
 // (no bonus) so the tests can assert the schedule has not regressed.
 static CAmount ExpectedMainnetBaseSubsidy(int nHeight)
 {
@@ -39,9 +39,9 @@ BOOST_AUTO_TEST_CASE(block_subsidy_test)
     const auto chainParams = CreateChainParams(*m_node.args, CBaseChainParams::MAIN);
     const Consensus::Params& consensus = chainParams->GetConsensus();
 
-    // Sample heights straddling every step boundary of Junkcoin's schedule. At
+    // Sample heights straddling every step boundary of Linkcoin's schedule. At
     // each height the reward must be the scheduled base value, or one of the two
-    // bonus variants (tripled, or pinned to 1000 JKC).
+    // bonus variants (tripled, or pinned to 1000 LNC).
     const int heights[] = {
         0, 100, 101, 1540, 1541, 2980, 2981, 5860, 5861, 100000,
         262799, 262800, 394199, 394200, 656999, 657000, 1182599, 1182600,
@@ -63,9 +63,9 @@ BOOST_AUTO_TEST_CASE(subsidy_limit_test)
     const auto chainParams = CreateChainParams(*m_node.args, CBaseChainParams::MAIN);
     const Consensus::Params& consensus = chainParams->GetConsensus();
 
-    // The per-block reward is never more than 3000 JKC (3x the 1000 JKC opening
+    // The per-block reward is never more than 3000 LNC (3x the 1000 LNC opening
     // reward). Walk the emission curve and verify the running supply stays well
-    // within MoneyRange (MAX_MONEY = 54,000,000 JKC).
+    // within MoneyRange (MAX_MONEY = 54,000,000 LNC).
     CAmount nSum = 0;
     for (int nHeight = 0; nHeight < 5000000; nHeight += 1000) {
         const CAmount nSubsidy = GetBlockSubsidy(nHeight, consensus);

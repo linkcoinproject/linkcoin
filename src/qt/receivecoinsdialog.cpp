@@ -95,7 +95,7 @@ void ReceiveCoinsDialog::setModel(WalletModel *_model)
         columnResizingFixer = new GUIUtil::TableViewLastColumnResizingFixer(tableView, AMOUNT_MINIMUM_COLUMN_WIDTH, DATE_COLUMN_WIDTH, this);
 
         // Setup address type combo box
-        // Junkcoin: Only show address types that are activated
+        // Linkcoin: Only show address types that are activated
         const int currentHeight = _model->node().getNumBlocks();
         const Consensus::Params& consensus = Params().GetConsensus();
         

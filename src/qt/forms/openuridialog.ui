@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Open junkcoin URI</string>
+   <string>Open linkcoin URI</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
@@ -26,7 +26,7 @@
      <item>
       <widget class="QValidatedLineEdit" name="uriEdit">
        <property name="placeholderText">
-        <string notr="true">junkcoin:</string>
+        <string notr="true">linkcoin:</string>
        </property>
       </widget>
      </item>

@@ -1316,9 +1316,9 @@ nodist_test_test_linkcoin_SOURCES = $(GENERATED_TEST_FILES)
 
 $(BITCOIN_TESTS): $(GENERATED_TEST_FILES)
 
-CLEAN_JUNKCOIN_TEST = test/*.gcda test/*.gcno test/fuzz/*.gcda test/fuzz/*.gcno test/util/*.gcda test/util/*.gcno $(GENERATED_TEST_FILES) $(BITCOIN_TESTS:=.log)
+CLEAN_LINKCOIN_TEST = test/*.gcda test/*.gcno test/fuzz/*.gcda test/fuzz/*.gcno test/util/*.gcda test/util/*.gcno $(GENERATED_TEST_FILES) $(BITCOIN_TESTS:=.log)
 
-CLEANFILES += $(CLEAN_JUNKCOIN_TEST)
+CLEANFILES += $(CLEAN_LINKCOIN_TEST)
 
 if TARGET_WINDOWS
 linkcoin_test: $(TEST_BINARY)
@@ -1334,7 +1334,7 @@ linkcoin_test_check: $(TEST_BINARY) FORCE
 	$(MAKE) check-TESTS TESTS=$^
 
 linkcoin_test_clean : FORCE
-	rm -f $(CLEAN_JUNKCOIN_TEST) $(test_test_linkcoin_OBJECTS) $(TEST_BINARY)
+	rm -f $(CLEAN_LINKCOIN_TEST) $(test_test_linkcoin_OBJECTS) $(TEST_BINARY)
 
 check-local: $(BITCOIN_TESTS:.cpp=.cpp.test)
 if BUILD_BITCOIN_TX
