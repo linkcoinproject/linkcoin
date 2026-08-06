@@ -365,7 +365,7 @@ jobs:
 
   publish:
     name: Publish release assets
-    needs: [linux-amd64, linux-arm64, windows]
+    needs: [linux-amd64, linux-arm64, windows, macos]
     runs-on: ubuntu-22.04
     if: github.event_name == 'release' || inputs.upload_tag != ''
     steps:
