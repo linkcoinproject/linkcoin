@@ -242,7 +242,7 @@ jobs:
           export HOMEBREW_NO_REQUIRE_TAP_TRUST=1
           brew update
           brew install automake libtool boost pkg-config python@3 \
-            qt@5 libevent berkeley-db@4 openssl@3 librsvg qrencode || true
+            qt@5 libevent berkeley-db@4 openssl@3 librsvg qrencode fmt || true
           brew list --versions automake libtool boost pkg-config qt@5 libevent \
             berkeley-db@4 openssl@3 qrencode
 

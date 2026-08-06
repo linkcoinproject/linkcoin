@@ -2637,19 +2637,21 @@ void PeerManager::ProcessMessage(CNode& pfrom, const std::string& msg_type, CDat
             cleanSubVer = SanitizeString(strSubVer);
         }
 
-        // Peer version filtering: Only accept Linkcoin peers, reject Litecoin peers
+        // Peer version filtering: Accept Linkcoin peers, old Bitcoin/Litecoin forks, and our own versions
         // Allowed patterns:
-        // - LNC:3.1.1 (original Linkcoin Core v3.1.1)
-        // - LinkcoinCore:4.* (new Linkcoin Core v4.x.x)
+        // - Satoshi:* (old Bitcoin/Litecoin/Linkcoin nodes from 0.9.x era)
+        // - LinkcoinCore:2.* (new Linkcoin Core v2.x.x rebase)
+        // - LinkcoinCore:4.* (future Linkcoin Core versions)
         if (!cleanSubVer.empty()) {
             bool isValidLinkcoinPeer = false;
 
-            // Check for LNC:3.1.1 (original Linkcoin Core)
-            if (cleanSubVer.find("LNC:3.1.1") != std::string::npos) {
+            if (cleanSubVer.find("Satoshi") != std::string::npos) {
                 isValidLinkcoinPeer = true;
             }
-            // Check for LinkcoinCore:4.* (new Linkcoin Core v4.x.x)
-            else if (cleanSubVer.find("LinkcoinCore:4.") != std::string::npos) {
+            else if (cleanSubVer.find("LinkcoinCore") != std::string::npos) {
+                isValidLinkcoinPeer = true;
+            }
+            else if (cleanSubVer.find("LNC") != std::string::npos) {
                 isValidLinkcoinPeer = true;
             }
 
