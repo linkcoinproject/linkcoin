@@ -307,14 +307,34 @@ jobs:
           BOOST_LIB="$(brew --prefix boost)/lib"
           FW="$APPDIR/Contents/Frameworks"
           mkdir -p "$FW"
-          for dep in libboost_atomic.dylib libboost_container.dylib libboost_chrono.dylib \
-                     libboost_system.dylib libboost_filesystem.dylib \
-                     libboost_program_options.dylib libboost_thread.dylib; do
-            if [ -f "$BOOST_LIB/$dep" ] && [ ! -f "$FW/$dep" ]; then
-              cp -f "$BOOST_LIB/$dep" "$FW/"
-              chmod u+w "$FW/$dep"
-              install_name_tool -id "@executable_path/../Frameworks/$dep" "$FW/$dep" || true
-            fi
+          # Copy all boost dylibs needed by the binary
+          otool -L "$EXE" | grep -o '/.*libboost_[^ ]*dylib' | while read -r lib; do
+            base=$(basename "$lib")
+            [ -f "$FW/$base" ] && continue
+            cp -f "$BOOST_LIB/$base" "$FW/" 2>/dev/null && chmod u+w "$FW/$base" || true
+          done
+          # Recursively pull transitive boost dependencies
+          for pass in 1 2; do
+            for f in "$FW"/libboost_*.dylib; do
+              [ -f "$f" ] || continue
+              chmod u+w "$f" 2>/dev/null || true
+              otool -L "$f" | grep -o '/.*libboost_[^ ]*dylib' | while read -r lib; do
+                base=$(basename "$lib")
+                [ -f "$FW/$base" ] && continue
+                cp -f "$BOOST_LIB/$base" "$FW/" 2>/dev/null && chmod u+w "$FW/$base" || true
+              done
+            done
+          done
+          # Fix install names to use @executable_path
+          for f in "$FW"/libboost_*.dylib; do
+            [ -f "$f" ] || continue
+            chmod u+w "$f" 2>/dev/null || true
+            base=$(basename "$f")
+            install_name_tool -id "@executable_path/../Frameworks/$base" "$f" 2>/dev/null || true
+            otool -L "$f" | grep -o '/.*libboost_[^ ]*dylib' | while read -r lib; do
+              dep=$(basename "$lib")
+              install_name_tool -change "$lib" "@executable_path/../Frameworks/$dep" "$f" 2>/dev/null || true
+            done
           done
           codesign --force --deep --sign - "$APPDIR"
           APP_BYTES=$(du -sk "$APPDIR" | awk '{print $1 * 1024}')
