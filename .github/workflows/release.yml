@@ -304,7 +304,6 @@ jobs:
             echo "ERROR: macdeployqt not found"
             exit 1
           fi
-          python3 contrib/macdeploy/bundle-dylibs.py "$APPDIR"
           BOOST_LIB="$(brew --prefix boost)/lib"
           FW="$APPDIR/Contents/Frameworks"
           mkdir -p "$FW"
@@ -317,18 +316,6 @@ jobs:
               install_name_tool -id "@executable_path/../Frameworks/$dep" "$FW/$dep" || true
             fi
           done
-          for f in "$FW"/libboost_*.dylib; do
-            [ -f "$f" ] || continue
-            chmod u+w "$f"
-            otool -L "$f" | awk '/@loader_path\// {print $1}' | while read -r ref; do
-              base="${ref##*/}"
-              if [ -f "$FW/$base" ]; then
-                install_name_tool -change "$ref" \
-                  "@executable_path/../Frameworks/$base" "$f" || true
-              fi
-            done
-          done
-          python3 contrib/macdeploy/bundle-dylibs.py "$APPDIR"
           codesign --force --deep --sign - "$APPDIR"
           APP_BYTES=$(du -sk "$APPDIR" | awk '{print $1 * 1024}')
           EXE_BYTES=$(stat -f%z "$EXE")
@@ -378,7 +365,7 @@ jobs:
 
   publish:
     name: Publish release assets
-    needs: [linux-amd64, linux-arm64, windows, macos]
+    needs: [linux-amd64, linux-arm64, windows]
     runs-on: ubuntu-22.04
     if: github.event_name == 'release' || inputs.upload_tag != ''
     steps:
