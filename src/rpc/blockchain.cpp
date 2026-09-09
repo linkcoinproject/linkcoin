@@ -92,21 +92,32 @@ CConnman& EnsureConnman(const util::Ref& context)
 }
 
 /* Calculate the difficulty for a given block index.
+ *
+ * Linkcoin: difficulty is expressed as a multiple of the chain's own
+ * proof-of-work limit (powLimit), not Bitcoin's 0x0000ffff@shift-29 reference.
+ * Linkcoin's mainnet powLimit (2^236) is 4096x easier than Bitcoin's reference
+ * (2^224), so the old formula reported a difficulty 4096x too low.  We now
+ * normalise against the actual powLimit compact encoding of the active
+ * chain, so difficulty 1.0 == powLimit on every network (main/test/regtest).
  */
 double GetDifficulty(const CBlockIndex* blockindex)
 {
     CHECK_NONFATAL(blockindex);
 
-    int nShift = (blockindex->nBits >> 24) & 0xff;
-    double dDiff =
-        (double)0x0000ffff / (double)(blockindex->nBits & 0x00ffffff);
+    // Reference (difficulty 1.0) is the chain's own powLimit in compact form.
+    const unsigned int nPowLimitBits = UintToArith256(Params().GetConsensus().powLimit).GetCompact();
+    const int nPowShift = (nPowLimitBits >> 24) & 0xff;
+    const unsigned int nPowMantissa = nPowLimitBits & 0x00ffffff;
 
-    while (nShift < 29)
+    int nShift = (blockindex->nBits >> 24) & 0xff;
+    double dDiff = (double)nPowMantissa / (double)(blockindex->nBits & 0x00ffffff);
+
+    while (nShift < nPowShift)
     {
         dDiff *= 256.0;
         nShift++;
     }
-    while (nShift > 29)
+    while (nShift > nPowShift)
     {
         dDiff /= 256.0;
         nShift--;

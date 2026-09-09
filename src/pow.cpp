@@ -22,6 +22,10 @@ static const int64_t nEEDV2Height = 5607;
 static const int64_t nEEDHalflife = 172800;          // 48 hours (V0/V1)
 static const int64_t nEEDV2Halflife = 28800;         // 8 hours (V2)
 static const int64_t nEEDV3Height = 75000;           // V3 fix: per-block ASERT (hardfork 3)
+static const int64_t nEEDV4Height = 75019;            // V4 fix: timestamp-stable ASERT (hardfork 4)
+                                                     // Fixes bad-diffbits rejection when miners roll nTime,
+                                                     // and raises the per-block cap from 4x to 64x for faster
+                                                     // recovery after large hashrate drops.
 
 static const int nClassic2Height = 2500;
 static const int64_t nClassic2AveragingWindow = 24;
@@ -412,6 +416,72 @@ unsigned int ElasticExponentialDifficultyV3(const CBlockIndex* pindexLast, const
     return bnNew.GetCompact();
 }
 
+// EED V4: Timestamp-stable ASERT (blocks 75019+)
+//
+// Fixes two V3 problems that caused the chain to stall at block 75018:
+//
+//   1. bad-diffbits rejection when miners roll nTime.
+//      V3 computes the target from (block.nTime - prev.nTime), so the target
+//      depends on the very timestamp the miner is free to choose.  With the
+//      4x per-block cap, the bits returned for one timestamp are rejected for
+//      another timestamp in the same template, so almost every rolled block
+//      fails ContextualCheckBlockHeader with "bad-diffbits".
+//
+//   2. 4x cap too tight for recovery.
+//      When hashrate drops by 100x, V3 needs ~4 blocks (each ~6.7h) to catch
+//      up, during which the chain is effectively frozen.
+//
+// V4 changes:
+//   - The target is computed from the PREVIOUS block's solvetime only
+//     (prev.nTime - prevprev.nTime), so it is fixed for the block being mined
+//     and does not change when the miner rolls nTime.  This is the standard
+//     ASERT formulation and matches what ContextualCheckBlockHeader expects.
+//   - The per-block cap is raised to 64x (6 bits) so the difficulty can drop
+//     fast enough to clear a backlog within a few blocks.
+//   - Halflife stays at 8 hours (nEEDV2Halflife); the formula is otherwise
+//     identical to V3.
+unsigned int ElasticExponentialDifficultyV4(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
+{
+    const arith_uint256 bnPowLimit = UintToArith256(params.powLimit);
+    if (pindexLast == nullptr) return bnPowLimit.GetCompact();
+
+    // testnet/regtest: min-difficulty block after 2x target spacing
+    if (params.fPowAllowMinDifficultyBlocks && pblock) {
+        if (pblock->nTime > pindexLast->nTime + nTargetSpacing * 2)
+            return bnPowLimit.GetCompact();
+    }
+
+    const int64_t nHalflife = nEEDV2Halflife;
+
+    // Use the previous block's solvetime (prev - prevprev), NOT the block
+    // being mined.  This makes the target independent of nTime and therefore
+    // stable across time-rolling by the miner.
+    int64_t nSolvetime = nTargetSpacing;  // default for height 1 / no parent
+    if (pindexLast->pprev != nullptr) {
+        nSolvetime = pindexLast->GetBlockTime() - pindexLast->pprev->GetBlockTime();
+    }
+    if (nSolvetime < 1) nSolvetime = 1;
+
+    int64_t nDrift = nSolvetime - nTargetSpacing;
+
+    arith_uint256 bnPrevTarget;
+    bnPrevTarget.SetCompact(pindexLast->nBits);
+    arith_uint256 bnNew = ApplyExponentialAdjustmentV2(bnPrevTarget, nDrift, nHalflife);
+
+    // Safety cap: max 64x difficulty change per block (was 4x in V3).
+    // 64x lets a 100x hashrate drop recover in ~2 blocks instead of ~4.
+    arith_uint256 bnMinTarget = bnPrevTarget / arith_uint256(64);
+    arith_uint256 bnMaxTarget = bnPrevTarget * arith_uint256(64);
+
+    if (bnNew < bnMinTarget) bnNew = bnMinTarget;
+    if (bnNew > bnMaxTarget) bnNew = bnMaxTarget;
+
+    if (bnNew > bnPowLimit) bnNew = bnPowLimit;
+    if (bnNew == 0) bnNew = arith_uint256(1);
+
+    return bnNew.GetCompact();
+}
+
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
 {
     const arith_uint256 bnPowLimit = UintToArith256(params.powLimit);
@@ -420,6 +490,10 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
         return bnPowLimit.GetCompact();
 
     int nHeight = pindexLast->nHeight + 1;
+
+    // EED V4 - block 75019+ (timestamp-stable ASERT, 64x cap)
+    if (nHeight >= nEEDV4Height)
+        return ElasticExponentialDifficultyV4(pindexLast, pblock, params);
 
     // EED V3 - block 66000+ (fixed per-block ASERT, no anchor cap)
     if (nHeight >= nEEDV3Height)

@@ -121,8 +121,8 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_MWEB].nStartHeight = std::numeric_limits<int>::max();
         consensus.vDeployments[Consensus::DEPLOYMENT_MWEB].nTimeoutHeight = std::numeric_limits<int>::max();
 
-        consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000000000000000000000000000");
-        consensus.defaultAssumeValid = uint256S("0x2865bdde500f4c65eb97ac69c9bc29850a0571a19f2121613c283fbd2d334bd7");
+        consensus.nMinimumChainWork = uint256S("0x000000000000000000000000000000000000000000000000005aa909456c975f");
+        consensus.defaultAssumeValid = uint256S("0x18ea1a2cbf75315004aac6efdebffbd5bf4087773fea881e0ee7c2ad59cf6ee6");
 
         // AuxPoW parameters - disabled until future activation
         consensus.nAuxpowChainId = 0x4C4E; // "LN" in hex - Linkcoin chain ID
@@ -149,8 +149,8 @@ public:
         assert(genesis.hashMerkleRoot == uint256S("0xe1a7071da2ffc19a27b79029c110fa238b54d6c46933e5c5fb29cdca838d170e"));
 
         vSeeds.clear();
-        vSeeds.emplace_back("103.133.25.201");
-        vSeeds.emplace_back("159.223.90.59");
+        vSeeds.emplace_back("lnc-seed.s3na.xyz");
+        // Keep hardcoded IPs as fallback in vFixedSeeds (see below)
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,48);   // Linkcoin: addresses start with 'L'
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,5);    // Script addresses start with '3'
@@ -163,6 +163,7 @@ public:
         mweb_hrp = "lncmweb";
 
         vFixedSeeds.clear();
+        vFixedSeeds.assign(chainparams_seed_main, chainparams_seed_main + sizeof(chainparams_seed_main));
 
         fDefaultConsistencyChecks = false;
         fRequireStandard = true;

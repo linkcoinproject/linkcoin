@@ -69,7 +69,7 @@ int CMerkleTx::GetBlocksToMaturity() const
 {
     if (!IsCoinBase())
         return 0;
-    // Use COINBASE_MATURITY from consensus/consensus.h (70 blocks for Linkcoin)
+    // Use COINBASE_MATURITY from consensus/consensus.h (100 blocks for Linkcoin)
     return std::max(0, (COINBASE_MATURITY + 1) - GetDepthInMainChain());
 }
 

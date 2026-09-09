@@ -30,5 +30,6 @@ unsigned int ElasticExponentialDifficultyBuggy(const CBlockIndex* pindexLast, co
 unsigned int ElasticExponentialDifficultyV1(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params);
 unsigned int ElasticExponentialDifficultyV2(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params);
 unsigned int ElasticExponentialDifficultyV3(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params);
+unsigned int ElasticExponentialDifficultyV4(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params);
 
 #endif // LINKCOIN_POW_H
