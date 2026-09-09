@@ -242,9 +242,15 @@ jobs:
           export HOMEBREW_NO_REQUIRE_TAP_TRUST=1
           brew update
           brew install automake libtool boost pkg-config python@3 \
-            qt@5 libevent berkeley-db@4 openssl@3 librsvg qrencode fmt || true
+            qt@5 libevent openssl@3 librsvg qrencode fmt || true
           brew list --versions automake libtool boost pkg-config qt@5 libevent \
-            berkeley-db@4 openssl@3 qrencode
+            openssl@3 qrencode
+
+      - name: Build Berkeley DB 4.8 from source
+        run: |
+          set -e
+          ./contrib/install_db4.sh "$(pwd)" --enable-cxx --disable-shared --disable-replication
+          echo "BDB_PREFIX=$(pwd)/db4" >> $GITHUB_ENV
 
       - name: Configure and build
         run: |
@@ -254,7 +260,7 @@ jobs:
           export PATH="$(brew --prefix qt@5)/bin:$PATH"
           BOOST_PREFIX="$(brew --prefix boost)"
           OPENSSL_PREFIX="$(brew --prefix openssl@3)"
-          BDB_PREFIX="$(brew --prefix berkeley-db@4)"
+          BDB_PREFIX="${BDB_PREFIX}"
           QT_PREFIX="$(brew --prefix qt@5)"
           EVENT_PREFIX="$(brew --prefix libevent)"
           QRENCODE_PREFIX="$(brew --prefix qrencode)"
