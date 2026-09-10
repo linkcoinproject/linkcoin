@@ -68,13 +68,13 @@ public:
         consensus.BIP16Height = 0;
         consensus.BIP34Height = 0;
         consensus.BIP34Hash = uint256S("0x2865bdde500f4c65eb97ac69c9bc29850a0571a19f2121613c283fbd2d334bd7");
-        consensus.BIP65Height = 99999999; // Disabled
-        consensus.BIP66Height = 99999999; // Disabled
-        consensus.CSVHeight = std::numeric_limits<int>::max(); // Disabled
-        consensus.SegwitHeight = std::numeric_limits<int>::max(); // Disabled
-        consensus.TaprootHeight = std::numeric_limits<int>::max(); // Disabled
-        consensus.DisabledScriptReactivationHeight = std::numeric_limits<int>::max(); // Disabled
-        consensus.MWEBHeight = std::numeric_limits<int>::max(); // Disabled
+        consensus.BIP65Height = 76964; // Activate 2 days (720 blocks) after stall recovery
+        consensus.BIP66Height = 76964; // Same height as BIP65
+        consensus.CSVHeight = 77684; // Activate 2 days after BIP65/66
+        consensus.SegwitHeight = 78404; // Activate 2 days after CSV
+        consensus.TaprootHeight = std::numeric_limits<int>::max(); // Disabled — pending code port
+        consensus.DisabledScriptReactivationHeight = std::numeric_limits<int>::max(); // Disabled — pending Taproot
+        consensus.MWEBHeight = std::numeric_limits<int>::max(); // Disabled (pending code port)
         consensus.MinBIP9WarningHeight = 10080 + 10080;
         consensus.powLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 4 * 60;      // Linkcoin: 4 minutes
@@ -127,7 +127,7 @@ public:
         // AuxPoW parameters - disabled until future activation
         consensus.nAuxpowChainId = 0x4C4E; // "LN" in hex - Linkcoin chain ID
         consensus.fStrictChainId = true;
-        consensus.nAuxpowStartHeight = std::numeric_limits<int>::max(); // Disabled for now
+        consensus.nAuxpowStartHeight = 80204; // Activate 5 days after SegWit/Taproot
         consensus.nBlockAfterAuxpowRewardThreshold = 5;
         consensus.nLegacyBlocksBefore = -1; // Always allow legacy blocks
 
