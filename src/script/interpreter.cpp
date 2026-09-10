@@ -438,6 +438,13 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
     // static const valtype vchZero(0);
     static const valtype vchTrue(1, 1);
 
+    // Largest magnitude representable by a default (4-byte) CScriptNum.
+    // Re-enabled arithmetic opcodes that can grow their operands are bounded
+    // by this so an out-of-range result fails deterministically at the point
+    // of computation, instead of producing an oversized element that only
+    // errors later (or not at all, if consumed non-numerically).
+    static const int64_t nMaxScriptNumValue = 0x7fffffffLL;
+
     // sigversion cannot be TAPROOT here, as it admits no script execution.
     assert(sigversion == SigVersion::BASE || sigversion == SigVersion::WITNESS_V0 || sigversion == SigVersion::TAPSCRIPT);
 
@@ -478,24 +485,11 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                 }
             }
 
-            // Linkcoin: Check if legacy disabled opcodes are re-enabled via consensus flag
-            if (!(flags & SCRIPT_VERIFY_DISABLED_OPCODES_REENABLED)) {
-                if (opcode == OP_CAT ||
-                    opcode == OP_SUBSTR ||
-                    opcode == OP_LEFT ||
-                    opcode == OP_RIGHT ||
-                    opcode == OP_INVERT ||
-                    opcode == OP_AND ||
-                    opcode == OP_OR ||
-                    opcode == OP_XOR ||
-                    opcode == OP_2MUL ||
-                    opcode == OP_2DIV ||
-                    opcode == OP_MUL ||
-                    opcode == OP_DIV ||
-                    opcode == OP_MOD ||
-                    opcode == OP_LSHIFT ||
-                    opcode == OP_RSHIFT)
-                    return set_error(serror, SCRIPT_ERR_DISABLED_OPCODE); // Disabled opcodes (CVE-2010-5137).
+            // Linkcoin: Check if legacy disabled opcodes are re-enabled via consensus flag.
+            // IsReenabledOpcode() is the single source of truth, shared with
+            // IsOpSuccess() so the two lists can never diverge.
+            if (!(flags & SCRIPT_VERIFY_DISABLED_OPCODES_REENABLED) && IsReenabledOpcode(opcode)) {
+                return set_error(serror, SCRIPT_ERR_DISABLED_OPCODE); // Disabled opcodes (CVE-2010-5137).
             }
 
             // With SCRIPT_VERIFY_CONST_SCRIPTCODE, OP_CODESEPARATOR in non-segwit script is rejected even in an unexecuted branch
@@ -936,7 +930,11 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                     int nSize = CScriptNum(stacktop(-1), fRequireMinimal).getint();
                     if (nBegin < 0 || nSize < 0)
                         return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
-                    if ((unsigned int)(nBegin + nSize) > vch.size())
+                    // Compare without computing nBegin + nSize, which would
+                    // overflow signed int (undefined behaviour) for large
+                    // attacker-supplied operands and could bypass this check.
+                    if ((unsigned int)nBegin > vch.size() ||
+                        (unsigned int)nSize > vch.size() - (unsigned int)nBegin)
                         return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
                     vch = valtype(vch.begin() + nBegin, vch.begin() + nBegin + nSize);
                     popstack(stack);
@@ -1089,8 +1087,15 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                     {
                     case OP_1ADD:       bn += bnOne; break;
                     case OP_1SUB:       bn -= bnOne; break;
-                    case OP_2MUL:       bn = CScriptNum(bn.getint() * 2); break;
-                    case OP_2DIV:       bn = CScriptNum(bn.getint() / 2); break;
+                    case OP_2MUL:
+                    {
+                        const int64_t nResult = int64_t(bn.getint()) * 2;
+                        if (nResult > nMaxScriptNumValue || nResult < -nMaxScriptNumValue)
+                            return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                        bn = CScriptNum(nResult);
+                        break;
+                    }
+                    case OP_2DIV:       bn = CScriptNum(int64_t(bn.getint()) / 2); break;
                     case OP_NEGATE:     bn = -bn; break;
                     case OP_ABS:        if (bn < bnZero) bn = -bn; break;
                     case OP_NOT:        bn = (bn == bnZero); break;
@@ -1138,31 +1143,46 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                         break;
 
                     case OP_MUL:
-                        bn = CScriptNum(bn1.getint() * bn2.getint());
-                        break;
+                    {
+                        const int64_t nResult = int64_t(bn1.getint()) * int64_t(bn2.getint());
+                        if (nResult > nMaxScriptNumValue || nResult < -nMaxScriptNumValue)
+                            return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                        bn = CScriptNum(nResult);
+                    }
+                    break;
 
                     case OP_DIV:
                         if (bn2 == bnZero)
                             return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
-                        bn = CScriptNum(bn1.getint() / bn2.getint());
+                        bn = CScriptNum(int64_t(bn1.getint()) / int64_t(bn2.getint()));
                         break;
 
                     case OP_MOD:
                         if (bn2 == bnZero)
                             return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
-                        bn = CScriptNum(bn1.getint() % bn2.getint());
+                        bn = CScriptNum(int64_t(bn1.getint()) % int64_t(bn2.getint()));
                         break;
 
                     case OP_LSHIFT:
-                        if (bn2 < bnZero || bn2.getint() >= 32)
+                        // Shifting a negative value left is undefined behaviour
+                        // in C++; reject rather than risk consensus divergence
+                        // between compilers/platforms.
+                        if (bn1 < bnZero || bn2 < bnZero || bn2.getint() >= 32)
                             return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
-                        bn = CScriptNum(bn1.getint() << bn2.getint());
+                        {
+                            const int64_t nResult = int64_t(bn1.getint()) << bn2.getint();
+                            if (nResult > nMaxScriptNumValue || nResult < -nMaxScriptNumValue)
+                                return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                            bn = CScriptNum(nResult);
+                        }
                         break;
 
                     case OP_RSHIFT:
-                        if (bn2 < bnZero || bn2.getint() >= 32)
+                        // Right-shifting a negative value is implementation
+                        // defined (arithmetic vs logical); reject it.
+                        if (bn1 < bnZero || bn2 < bnZero || bn2.getint() >= 32)
                             return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
-                        bn = CScriptNum(bn1.getint() >> bn2.getint());
+                        bn = CScriptNum(int64_t(bn1.getint()) >> int64_t(bn2.getint()));
                         break;
 
                     case OP_BOOLAND:             bn = (bn1 != bnZero && bn2 != bnZero); break;
@@ -1974,7 +1994,7 @@ static bool ExecuteWitnessScript(const Span<const valtype>& stack_span, const CS
                 return set_error(serror, SCRIPT_ERR_BAD_OPCODE);
             }
             // New opcodes will be listed here. May use a different sigversion to modify existing opcodes.
-            if (IsOpSuccess(opcode)) {
+            if (IsOpSuccess(opcode, (flags & SCRIPT_VERIFY_DISABLED_OPCODES_REENABLED) != 0)) {
                 if (flags & SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS) {
                     return set_error(serror, SCRIPT_ERR_DISCOURAGE_OP_SUCCESS);
                 }

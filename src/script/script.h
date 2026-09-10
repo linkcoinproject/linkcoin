@@ -585,7 +585,15 @@ struct CScriptWitness
     std::string ToString() const;
 };
 
-/** Test for OP_SUCCESSx opcodes as defined by BIP342. */
-bool IsOpSuccess(const opcodetype& opcode);
+/** Test for opcodes disabled by Satoshi that this chain re-enables. */
+bool IsReenabledOpcode(const opcodetype& opcode);
+
+/** Test for OP_SUCCESSx opcodes as defined by BIP342.
+ *
+ * When the disabled opcodes are re-enabled they must no longer be treated as
+ * OP_SUCCESSx, otherwise any tapscript using them would succeed unconditionally
+ * (anyone-can-spend). Callers pass whether SCRIPT_VERIFY_DISABLED_OPCODES_REENABLED
+ * is active. */
+bool IsOpSuccess(const opcodetype& opcode, bool disabled_opcodes_reenabled = false);
 
 #endif // BITCOIN_SCRIPT_SCRIPT_H

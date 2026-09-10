@@ -367,8 +367,40 @@ bool GetScriptOp(CScriptBase::const_iterator& pc, CScriptBase::const_iterator en
     return true;
 }
 
-bool IsOpSuccess(const opcodetype& opcode)
+bool IsReenabledOpcode(const opcodetype& opcode)
 {
+    switch (opcode) {
+    case OP_CAT:
+    case OP_SUBSTR:
+    case OP_LEFT:
+    case OP_RIGHT:
+    case OP_INVERT:
+    case OP_AND:
+    case OP_OR:
+    case OP_XOR:
+    case OP_2MUL:
+    case OP_2DIV:
+    case OP_MUL:
+    case OP_DIV:
+    case OP_MOD:
+    case OP_LSHIFT:
+    case OP_RSHIFT:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool IsOpSuccess(const opcodetype& opcode, bool disabled_opcodes_reenabled)
+{
+    // BIP342 designated the historically-disabled opcodes as OP_SUCCESSx.
+    // Once those opcodes are re-enabled they must execute with their real
+    // semantics inside tapscript instead of unconditionally succeeding,
+    // otherwise any tapleaf using them would be anyone-can-spend.
+    if (disabled_opcodes_reenabled && IsReenabledOpcode(opcode)) {
+        return false;
+    }
+
     return opcode == 80 || opcode == 98 || (opcode >= 126 && opcode <= 129) ||
            (opcode >= 131 && opcode <= 134) || (opcode >= 137 && opcode <= 138) ||
            (opcode >= 141 && opcode <= 142) || (opcode >= 149 && opcode <= 153) ||
