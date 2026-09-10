@@ -244,7 +244,7 @@ jobs:
           brew install automake libtool boost pkg-config python@3 \
             qt@5 libevent openssl@3 librsvg qrencode fmt || true
           brew list --versions automake libtool boost pkg-config qt@5 libevent \
-            openssl@3 qrencode
+            openssl@3 qrencode fmt || true
 
       - name: Build Berkeley DB 4.8 from source
         run: |

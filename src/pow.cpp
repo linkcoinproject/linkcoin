@@ -26,6 +26,18 @@ static const int64_t nEEDV4Height = 75019;            // V4 fix: timestamp-stabl
                                                      // Fixes bad-diffbits rejection when miners roll nTime,
                                                      // and raises the per-block cap from 4x to 64x for faster
                                                      // recovery after large hashrate drops.
+static const int64_t nEEDV5Height = 76245;            // V5 fix: stall-breaking ASERT (hardfork 5)
+                                                     // V4 uses prev solvetime only, so difficulty cannot
+                                                     // adjust when no blocks are found (chain stalls).
+                                                     // V5 uses the actual time gap (block.nTime - prev.nTime)
+                                                     // when it exceeds 6x target spacing, allowing difficulty
+                                                     // to drop and unstick the chain. Also fixes V4 overshoot
+                                                     // by using 2-day halflife (like BCH) and 4x up cap.
+static const int64_t nEEDV5NormalHalflife = 172800;   // 2 days — prevents overshoot (BCH uses this)
+static const int64_t nEEDV5StallHalflife = 3600;      // 1 hour — fast emergency difficulty drop
+static const int64_t nEEDV5StallThreshold = 6;        // gap > 6x target spacing (24 min) = stalled
+static const int64_t nEEDV5CapUp = 4;                 // max 4x difficulty increase per block
+static const int64_t nEEDV5CapDown = 64;              // max 64x difficulty decrease per block
 
 static const int nClassic2Height = 2500;
 static const int64_t nClassic2AveragingWindow = 24;
@@ -482,6 +494,132 @@ unsigned int ElasticExponentialDifficultyV4(const CBlockIndex* pindexLast, const
     return bnNew.GetCompact();
 }
 
+// EED V5: Stall-breaking ASERT with BCH-style parameters (blocks 76245+)
+//
+// Fixes two V4 problems:
+//
+//   1. Chain stalls when no blocks are found.
+//      V4 computes target from prev solvetime only (prev.nTime - prevprev.nTime),
+//      so the target is fixed regardless of how long it takes to find the next
+//      block. If difficulty is too high and no miner is running, the chain
+//      stalls forever.
+//
+//   2. Difficulty overshoot during recovery.
+//      V4 uses 8-hour halflife + 64x cap for BOTH up and down. When blocks come
+//      fast (e.g. 1-2s), difficulty rises exponentially and overshoots, then the
+//      chain stalls at the overshoot difficulty.
+//
+// V5 changes:
+//   - Normal operation (gap <= 24 min):
+//     ASERT with 2-day halflife (like BCH) and 4x up / 64x down caps.
+//     The 2-day halflife prevents overshoot: at 1s solvetime, difficulty rises
+//     only 0.1% per block (vs V4's potential 64x per block).
+//   - Stall-breaking (gap > 24 min):
+//     ASERT with 1-hour halflife and 64x cap, using the ACTUAL time gap.
+//     After 1h stall: difficulty drops ~2x. After 6h: drops ~64x.
+//   - The final target is the MAXIMUM (easiest) of normal and stall-breaker.
+//   - ContextualCheckBlockHeader accepts targets in [V5 base, V5 expected],
+//     preventing bad-diffbits while limiting attacker advantage.
+//
+unsigned int ElasticExponentialDifficultyV5(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
+{
+    const arith_uint256 bnPowLimit = UintToArith256(params.powLimit);
+    if (pindexLast == nullptr) return bnPowLimit.GetCompact();
+
+    // testnet/regtest: min-difficulty block after 2x target spacing
+    if (params.fPowAllowMinDifficultyBlocks && pblock) {
+        if (pblock->nTime > pindexLast->nTime + nTargetSpacing * 2)
+            return bnPowLimit.GetCompact();
+    }
+
+    arith_uint256 bnPrevTarget;
+    bnPrevTarget.SetCompact(pindexLast->nBits);
+
+    // --- Normal target: ASERT with 2-day halflife, 4x up / 64x down caps ---
+    // Uses prev solvetime (timestamp-stable, no bad-diffbits)
+    int64_t nSolvetime = nTargetSpacing;  // default for height 1 / no parent
+    if (pindexLast->pprev != nullptr)
+        nSolvetime = pindexLast->GetBlockTime() - pindexLast->pprev->GetBlockTime();
+    if (nSolvetime < 1) nSolvetime = 1;
+
+    int64_t nNormalDrift = nSolvetime - nTargetSpacing;
+    arith_uint256 bnNormalTarget = ApplyExponentialAdjustmentV2(
+        bnPrevTarget, nNormalDrift, nEEDV5NormalHalflife);
+
+    // Asymmetric caps: 4x up (prevent overshoot), 64x down (fast recovery)
+    arith_uint256 bnMinTargetNormal = bnPrevTarget / arith_uint256(nEEDV5CapUp);
+    arith_uint256 bnMaxTargetNormal = bnPrevTarget * arith_uint256(nEEDV5CapDown);
+    if (bnNormalTarget < bnMinTargetNormal) bnNormalTarget = bnMinTargetNormal;
+    if (bnNormalTarget > bnMaxTargetNormal) bnNormalTarget = bnMaxTargetNormal;
+    if (bnNormalTarget > bnPowLimit) bnNormalTarget = bnPowLimit;
+    if (bnNormalTarget == 0) bnNormalTarget = arith_uint256(1);
+
+    // Without block header, can't compute time gap — return normal target
+    if (!pblock) return bnNormalTarget.GetCompact();
+
+    // --- Check if stall-breaking is needed ---
+    int64_t nTimeSinceLastBlock = pblock->nTime - pindexLast->GetBlockTime();
+
+    // Normal case: gap <= stall threshold (24 min)
+    if (nTimeSinceLastBlock <= nTargetSpacing * nEEDV5StallThreshold)
+        return bnNormalTarget.GetCompact();
+
+    // --- Stall-breaking: ASERT with 1-hour halflife, 64x cap ---
+    if (nTimeSinceLastBlock < 1) nTimeSinceLastBlock = 1;
+
+    int64_t nStallDrift = nTimeSinceLastBlock - nTargetSpacing;
+    arith_uint256 bnStallTarget = ApplyExponentialAdjustmentV2(
+        bnPrevTarget, nStallDrift, nEEDV5StallHalflife);
+
+    // 64x cap both directions for stall-breaking
+    arith_uint256 bnMinTargetStall = bnPrevTarget / arith_uint256(64);
+    arith_uint256 bnMaxTargetStall = bnPrevTarget * arith_uint256(64);
+    if (bnStallTarget < bnMinTargetStall) bnStallTarget = bnMinTargetStall;
+    if (bnStallTarget > bnMaxTargetStall) bnStallTarget = bnMaxTargetStall;
+    if (bnStallTarget > bnPowLimit) bnStallTarget = bnPowLimit;
+    if (bnStallTarget == 0) bnStallTarget = arith_uint256(1);
+
+    // Return the EASIER target (higher target = lower difficulty)
+    if (bnStallTarget > bnNormalTarget) {
+        LogPrintf("EED V5: stall-breaking at height=%d, timeGap=%" PRId64 "s (%.1fh), "
+                  "normal_diff→stall_diff drop\n",
+                  pindexLast->nHeight + 1, nTimeSinceLastBlock,
+                  (double)nTimeSinceLastBlock / 3600.0);
+        return bnStallTarget.GetCompact();
+    }
+
+    return bnNormalTarget.GetCompact();
+}
+
+// V5 helper: compute the V5 normal base target (timestamp-stable, no stall-breaking)
+// Used by ContextualCheckBlockHeader to validate V5+ blocks.
+unsigned int GetV5BaseTarget(const CBlockIndex* pindexLast, const Consensus::Params& params)
+{
+    if (pindexLast == nullptr) return UintToArith256(params.powLimit).GetCompact();
+
+    const arith_uint256 bnPowLimit = UintToArith256(params.powLimit);
+    arith_uint256 bnPrevTarget;
+    bnPrevTarget.SetCompact(pindexLast->nBits);
+
+    int64_t nSolvetime = nTargetSpacing;
+    if (pindexLast->pprev != nullptr)
+        nSolvetime = pindexLast->GetBlockTime() - pindexLast->pprev->GetBlockTime();
+    if (nSolvetime < 1) nSolvetime = 1;
+
+    int64_t nDrift = nSolvetime - nTargetSpacing;
+    arith_uint256 bnTarget = ApplyExponentialAdjustmentV2(
+        bnPrevTarget, nDrift, nEEDV5NormalHalflife);
+
+    arith_uint256 bnMinTarget = bnPrevTarget / arith_uint256(nEEDV5CapUp);
+    arith_uint256 bnMaxTarget = bnPrevTarget * arith_uint256(nEEDV5CapDown);
+    if (bnTarget < bnMinTarget) bnTarget = bnMinTarget;
+    if (bnTarget > bnMaxTarget) bnTarget = bnMaxTarget;
+    if (bnTarget > bnPowLimit) bnTarget = bnPowLimit;
+    if (bnTarget == 0) bnTarget = arith_uint256(1);
+
+    return bnTarget.GetCompact();
+}
+
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
 {
     const arith_uint256 bnPowLimit = UintToArith256(params.powLimit);
@@ -490,6 +628,10 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
         return bnPowLimit.GetCompact();
 
     int nHeight = pindexLast->nHeight + 1;
+
+    // EED V5 - block 76245+ (stall-breaking ASERT)
+    if (nHeight >= nEEDV5Height)
+        return ElasticExponentialDifficultyV5(pindexLast, pblock, params);
 
     // EED V4 - block 75019+ (timestamp-stable ASERT, 64x cap)
     if (nHeight >= nEEDV4Height)

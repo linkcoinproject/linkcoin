@@ -84,13 +84,41 @@ CONFIG_SUB_HASH='3a4befde9bcdf0fdb2763fc1bfa74e8696df94e1ad7aac8042d133c8ff1d2e3
 rm -f "dist/config.guess"
 rm -f "dist/config.sub"
 
-http_get "${CONFIG_GUESS_URL}" dist/config.guess "${CONFIG_GUESS_HASH}"
-http_get "${CONFIG_SUB_URL}" dist/config.sub "${CONFIG_SUB_HASH}"
+# Try to download modern config.guess/config.sub; if hash check fails
+# (e.g. upstream changed the file), fall back to system copies.
+if ! http_get "${CONFIG_GUESS_URL}" dist/config.guess "${CONFIG_GUESS_HASH}" 2>/dev/null; then
+  rm -f dist/config.guess
+  echo "WARNING: config.guess download/hash failed, trying system copy"
+  # Try automake's config.guess (installed via Homebrew on macOS)
+  for candidate in \
+    "$(command -v config.guess 2>/dev/null)" \
+    /usr/share/misc/config.guess \
+    "$(brew --prefix automake 2>/dev/null)/share/automake-*/config.guess" \
+    /opt/homebrew/share/automake-*/config.guess \
+    /usr/local/share/automake-*/config.guess; do
+    [ -f "$candidate" ] && cp "$candidate" dist/config.guess && echo "Using: $candidate" && break
+  done
+  [ ! -f dist/config.guess ] && echo "WARNING: no system config.guess found, using bundled (may be outdated)"
+fi
+if ! http_get "${CONFIG_SUB_URL}" dist/config.sub "${CONFIG_SUB_HASH}" 2>/dev/null; then
+  rm -f dist/config.sub
+  echo "WARNING: config.sub download/hash failed, trying system copy"
+  for candidate in \
+    "$(command -v config.sub 2>/dev/null)" \
+    /usr/share/misc/config.sub \
+    "$(brew --prefix automake 2>/dev/null)/share/automake-*/config.sub" \
+    /opt/homebrew/share/automake-*/config.sub \
+    /usr/local/share/automake-*/config.sub; do
+    [ -f "$candidate" ] && cp "$candidate" dist/config.sub && echo "Using: $candidate" && break
+  done
+  [ ! -f dist/config.sub ] && echo "WARNING: no system config.sub found, using bundled (may be outdated)"
+fi
 
 cd build_unix/
 
 "${BDB_PREFIX}/${BDB_VERSION}/dist/configure" \
   --enable-cxx --disable-shared --disable-replication --with-pic --prefix="${BDB_PREFIX}" \
+  --with-mutex=POSIX/pthreads \
   "${@}"
 
 make install

@@ -3684,8 +3684,28 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     // Check proof of work
     // Linkcoin: Use height-based consensus for correct rules at this height
     const Consensus::Params& consensusParams = params.GetConsensus(nHeight);
-    if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams))
-        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-diffbits", "incorrect proof of work");
+    unsigned int nExpected = GetNextWorkRequired(pindexPrev, &block, consensusParams);
+    if (block.nBits != nExpected) {
+        // V5+: accept blocks with target in [V5 base, V5 expected]
+        // This prevents bad-diffbits rejection when miners roll nTime and
+        // allows stall-breaking when the chain is stuck.
+        // Security: the block's target must be:
+        //   - >= V5 base (not harder than normal difficulty)
+        //   - <= V5 expected (not easier than what the timestamp justifies)
+        if (nHeight >= 76245) {
+            unsigned int nV5Base = GetV5BaseTarget(pindexPrev, consensusParams);
+            arith_uint256 bnV5Base, bnActual, bnExpected;
+            bnV5Base.SetCompact(nV5Base);
+            bnActual.SetCompact(block.nBits);
+            bnExpected.SetCompact(nExpected);
+            if (bnActual < bnV5Base || bnActual > bnExpected) {
+                return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-diffbits", "incorrect proof of work");
+            }
+            // Accept: V5 base <= actual target <= V5 expected
+        } else {
+            return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-diffbits", "incorrect proof of work");
+        }
+    }
 
     // Check against checkpoints
     if (fCheckpointsEnabled) {
