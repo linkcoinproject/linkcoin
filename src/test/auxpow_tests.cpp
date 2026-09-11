@@ -372,17 +372,18 @@ BOOST_AUTO_TEST_CASE(auxpow_pow)
     CBlockHeader block;
     block.nBits = target.GetCompact();
 
-    /* Verify the block version checks.  */
+    /* Verify the block version checks.  For non-AuxPoW blocks, chain ID is
+     not validated because BIP9 version bits overlap with the chain ID field.
+     Only PoW is checked for non-AuxPoW blocks.  */
 
     block.nVersion = 1;
     mineBlock(block, true, params);
     BOOST_CHECK(CheckAuxPowProofOfWork(block, params));
 
-    // Linkcoin block version 2 can be both AuxPoW and regular, so test 3
-
+    // Non-AuxPoW blocks pass regardless of chain ID (BIP9 compatibility)
     block.nVersion = 3;
     mineBlock(block, true, params);
-    BOOST_CHECK(!CheckAuxPowProofOfWork(block, params));
+    BOOST_CHECK(CheckAuxPowProofOfWork(block, params));
 
     block.SetBaseVersion(2, params.nAuxpowChainId);
     mineBlock(block, true, params);
@@ -390,7 +391,7 @@ BOOST_AUTO_TEST_CASE(auxpow_pow)
 
     block.SetChainId(params.nAuxpowChainId + 1);
     mineBlock(block, true, params);
-    BOOST_CHECK(!CheckAuxPowProofOfWork(block, params));
+    BOOST_CHECK(CheckAuxPowProofOfWork(block, params));
 
     /* Check the case when the block does not have auxpow (this is true
      right now).  */

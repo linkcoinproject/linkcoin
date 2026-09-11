@@ -33,17 +33,10 @@ bool ValidateBlockSubsidy(const CAmount nSubsidy, int nHeight, const Consensus::
 // AuxPoW-aware proof-of-work check (supports future AuxPoW activation)
 bool CheckAuxPowProofOfWork(const CBlockHeader& block, const Consensus::Params& params)
 {
-    // Verify chain ID for non-legacy blocks
-    // Mask out BIP9 version bits (bits 29-31) which overlap with chain ID field
-    if (!block.IsLegacy() && params.fStrictChainId) {
-        int32_t nChainId = block.GetChainId() & 0x1FFF; // bits 16-28 only
-        if (nChainId != params.nAuxpowChainId) {
-            return error("%s: block does not have our chain ID (got %d, expected %d, full nVersion %d)",
-                        __func__, nChainId, params.nAuxpowChainId, block.nVersion);
-        }
-    }
-
-    // Non-AuxPoW blocks
+    // Non-AuxPoW blocks: just check PoW
+    // Chain ID is not validated for non-AuxPoW blocks because BIP9 version
+    // bits (29-31) overlap with the chain ID field in the version.
+    // For AuxPoW blocks, chain ID is validated by auxpow->check() below.
     if (!block.auxpow) {
         if (block.IsAuxpow()) {
             return error("%s: no auxpow on block with auxpow version", __func__);
