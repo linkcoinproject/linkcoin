@@ -125,10 +125,14 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     assert(pindexPrev != nullptr);
     nHeight = pindexPrev->nHeight + 1;
 
-    pblock->nVersion = 2; // Linkcoin: fixed version 2 for legacy consensus compatibility
+    pblock->nVersion = ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
+    if ((pblock->nVersion & 0xFF) < 4) {
+        pblock->nVersion = (pblock->nVersion & ~0xFF) | 4;
+    }
     // Set AuxPoW chain ID only when AuxPoW is active
-    if (nHeight >= chainparams.GetConsensus().nAuxpowStartHeight) {
+    if (chainparams.GetConsensus().nAuxpowChainId != 0 && nHeight >= chainparams.GetConsensus().nAuxpowStartHeight) {
         pblock->SetChainId(chainparams.GetConsensus().nAuxpowChainId);
+        pblock->nVersion |= VERSIONBITS_TOP_BITS;
     }
     // -regtest only: allow overriding block.nVersion
     if (chainparams.MineBlocksOnDemand())

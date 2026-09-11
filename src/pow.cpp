@@ -627,6 +627,10 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
     if (pindexLast == nullptr)
         return bnPowLimit.GetCompact();
 
+    // Default rule for chains with no retargeting (regtest, low-difficulty testnet)
+    if (params.fPowNoRetargeting)
+        return pindexLast->nBits;
+
     int nHeight = pindexLast->nHeight + 1;
 
     // EED V5 - block 76245+ (stall-breaking ASERT)
@@ -697,6 +701,31 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
 
     LogPrintf("GetNextWorkRequired RETARGET: height=%d, Before=%08x, After=%08x\n",
               nHeight, pindexLast->nBits, bnNew.GetCompact());
+
+    return bnNew.GetCompact();
+}
+
+unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nFirstBlockTime, const Consensus::Params& params)
+{
+    if (params.fPowNoRetargeting)
+        return pindexLast->nBits;
+
+    // Limit adjustment step
+    int64_t nActualTimespan = pindexLast->GetBlockTime() - nFirstBlockTime;
+    if (nActualTimespan < params.nPowTargetTimespan/4)
+        nActualTimespan = params.nPowTargetTimespan/4;
+    if (nActualTimespan > params.nPowTargetTimespan*4)
+        nActualTimespan = params.nPowTargetTimespan*4;
+
+    // Retarget
+    const arith_uint256 bnPowLimit = UintToArith256(params.powLimit);
+    arith_uint256 bnNew;
+    bnNew.SetCompact(pindexLast->nBits);
+    bnNew *= nActualTimespan;
+    bnNew /= params.nPowTargetTimespan;
+
+    if (bnNew > bnPowLimit)
+        bnNew = bnPowLimit;
 
     return bnNew.GetCompact();
 }
