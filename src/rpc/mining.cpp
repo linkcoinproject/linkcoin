@@ -787,7 +787,6 @@ static RPCHelpMan getblocktemplate()
     UniValue aCaps(UniValue::VARR); aCaps.push_back("proposal");
 
     UniValue transactions(UniValue::VARR);
-    UniValue txCoinbase(UniValue::VNULL);
     std::map<uint256, int64_t> setTxIndex;
     int i = 0;
     for (const auto& it : pblock->vtx) {
@@ -795,15 +794,8 @@ static RPCHelpMan getblocktemplate()
         uint256 txHash = tx.GetHash();
         setTxIndex[txHash] = i++;
 
-        if (tx.IsCoinBase()) {
-            UniValue entry(UniValue::VOBJ);
-            entry.pushKV("data", EncodeHexTx(tx));
-            entry.pushKV("txid", txHash.GetHex());
-            entry.pushKV("hash", tx.GetWitnessHash().GetHex());
-            entry.pushKV("required", true);
-            txCoinbase = entry;
+        if (tx.IsCoinBase())
             continue;
-        }
 
         UniValue entry(UniValue::VOBJ);
 
@@ -902,8 +894,23 @@ static RPCHelpMan getblocktemplate()
 
     result.pushKV("previousblockhash", pblock->hashPrevBlock.GetHex());
     result.pushKV("transactions", transactions);
-    if (!txCoinbase.isNull()) {
-        result.pushKV("coinbasetxn", txCoinbase);
+    int nHeight = pindexPrev->nHeight + 1;
+    bool isDevFundActive = (nHeight > Params().GetDevelopmentFundStartHeight()) &&
+                           (nHeight <= Params().GetLastDevelopmentFundBlockHeight());
+    if (isDevFundActive) {
+        UniValue foundation(UniValue::VARR);
+        for (size_t k = 1; k < pblock->vtx[0]->vout.size(); ++k) {
+            const CTxOut& out = pblock->vtx[0]->vout[k];
+            CTxDestination dest;
+            if (ExtractDestination(out.scriptPubKey, dest)) {
+                UniValue entry(UniValue::VOBJ);
+                entry.pushKV("payee", EncodeDestination(dest));
+                entry.pushKV("script", HexStr(out.scriptPubKey));
+                entry.pushKV("amount", (int64_t)out.nValue);
+                foundation.push_back(entry);
+            }
+        }
+        result.pushKV("foundation", foundation);
     }
     result.pushKV("coinbaseaux", aux);
     result.pushKV("coinbasevalue", (int64_t)pblock->vtx[0]->vout[0].nValue);

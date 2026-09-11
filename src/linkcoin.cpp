@@ -11,6 +11,7 @@
 #include <primitives/block.h>
 #include <util/system.h>
 #include <validation.h>
+#include <versionbits.h>
 
 // Linkcoin block subsidy: 80 LNC, halving every 400,000 blocks
 // Special IPO block at height 10: 500,000 LNC
@@ -50,6 +51,13 @@ bool CheckAuxPowProofOfWork(const CBlockHeader& block, const Consensus::Params& 
     // AuxPoW blocks
     if (!block.IsAuxpow()) {
         return error("%s: auxpow on block with non-auxpow version", __func__);
+    }
+    // Validate that the block version's chain ID matches the network's expected chain ID
+    // GetChainId() returns nVersion >> 16 which includes VERSIONBITS_TOP_BITS (0x2000)
+    int32_t nExpectedChainId = params.nAuxpowChainId | (VERSIONBITS_TOP_BITS >> 16);
+    if (block.GetChainId() != nExpectedChainId) {
+        return error("%s: block chain ID %x does not match expected %x", __func__,
+                     block.GetChainId(), nExpectedChainId);
     }
     if (!block.auxpow->check(block.GetHash(), block.GetChainId(), params)) {
         return error("%s: AUX POW is not valid", __func__);
