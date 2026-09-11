@@ -17,6 +17,8 @@
 #include <policy/feerate.h>
 #include <policy/policy.h>
 #include <pow.h>
+#include <primitives/block.h>
+#include <primitives/pureheader.h>
 #include <primitives/transaction.h>
 #include <timedata.h>
 #include <util/moneystr.h>
