@@ -3743,12 +3743,16 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     // However, auxpow is optional - some blocks may not use it even after activation
     // Therefore we DON'T enforce auxpow flag requirement
 
-    const bool usesVersionBits = ((block.nVersion & VERSIONBITS_TOP_MASK) == VERSIONBITS_TOP_BITS);
+    // Linkcoin: blocks with chain ID in bits 16+ or AuxPoW flag are "modern" blocks
+    // that should not be rejected for low base version. Check if TOP_BITS is set
+    // (not exact match) because chain ID bits can overlap with BIP9 signal bits.
+    const bool usesVersionBits = (block.nVersion & VERSIONBITS_TOP_BITS) != 0;
     // AuxPoW is optional — only skip version check if block actually has AuxPoW flag
     const bool isAuxPoW = block.IsAuxpow();
+    const bool hasChainId = block.GetChainId() != 0;
     const int32_t nBaseVersion = block.GetBaseVersion();
 
-    if (!usesVersionBits && !isAuxPoW) {
+    if (!usesVersionBits && !isAuxPoW && !hasChainId) {
         // Reject outdated version blocks when 95% (75% on testnet) of the network has upgraded:
         // check for version 2, 3 and 4 upgrades
         // Linkcoin: Use base version for auxpow blocks (strip auxpow flag and chain ID)
@@ -3760,7 +3764,7 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
         }
     }
 
-    if (!usesVersionBits && !isAuxPoW && IsWitnessEnabled(pindexPrev, consensusParams)) {
+    if (!usesVersionBits && !isAuxPoW && !hasChainId && IsWitnessEnabled(pindexPrev, consensusParams)) {
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, strprintf("bad-version(0x%08x)", block.nVersion),
                              strprintf("rejected nVersion=0x%08x block (base version %d)", block.nVersion, nBaseVersion));
     }

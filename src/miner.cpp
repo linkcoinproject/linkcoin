@@ -131,11 +131,13 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
 
     // Linkcoin version layout: bits 0-7 = base version, bits 16+ = chain ID
     // Pre-AuxPoW: use VERSIONBITS_TOP_BITS for BIP9 signaling, chain ID = 0
-    // AuxPoW: set chain ID and VERSION_AUXPOW flag
+    // AuxPoW: set chain ID for identification (VERSION_AUXPOW flag is NOT set
+    // for local mining — AuxPoW blocks come from merged mining pools)
     pblock->nVersion = VERSIONBITS_TOP_BITS | 4; // base version 4, chain ID 0
     if (nHeight >= chainparams.GetConsensus().nAuxpowStartHeight) {
         pblock->SetChainId(chainparams.GetConsensus().nAuxpowChainId);
-        pblock->nVersion |= CPureBlockHeader::VERSION_AUXPOW;
+        // Re-add VERSIONBITS_TOP_BITS (SetChainId clears upper 16 bits)
+        pblock->nVersion |= VERSIONBITS_TOP_BITS;
     }
     // -regtest only: allow overriding block.nVersion
     if (chainparams.MineBlocksOnDemand())
