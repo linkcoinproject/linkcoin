@@ -22,6 +22,8 @@
 #include <util/moneystr.h>
 #include <util/system.h>
 
+#include <versionbits.h>
+
 #include <algorithm>
 #include <utility>
 
@@ -125,10 +127,13 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     assert(pindexPrev != nullptr);
     nHeight = pindexPrev->nHeight + 1;
 
-    pblock->nVersion = 2; // Linkcoin: fixed version 2 for legacy consensus compatibility
-    // Set AuxPoW chain ID only when AuxPoW is active
+    // Linkcoin version layout: bits 0-7 = base version, bits 16+ = chain ID
+    // Pre-AuxPoW: use VERSIONBITS_TOP_BITS for BIP9 signaling, chain ID = 0
+    // AuxPoW: set chain ID and VERSION_AUXPOW flag
+    pblock->nVersion = VERSIONBITS_TOP_BITS | 4; // base version 4, chain ID 0
     if (nHeight >= chainparams.GetConsensus().nAuxpowStartHeight) {
         pblock->SetChainId(chainparams.GetConsensus().nAuxpowChainId);
+        pblock->nVersion |= VERSION_AUXPOW;
     }
     // -regtest only: allow overriding block.nVersion
     if (chainparams.MineBlocksOnDemand())

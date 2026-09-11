@@ -149,7 +149,7 @@ public:
         assert(genesis.hashMerkleRoot == uint256S("0xe1a7071da2ffc19a27b79029c110fa238b54d6c46933e5c5fb29cdca838d170e"));
 
         vSeeds.clear();
-        vSeeds.emplace_back("lnc-seed.s3na.xyz");
+        vSeeds.emplace_back("seed-lnc.s3na.xyz");
         // Keep hardcoded IPs as fallback in vFixedSeeds (see below)
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,48);   // Linkcoin: addresses start with 'L'
@@ -228,26 +228,26 @@ public:
         consensus.BIP16Height = 0;
         consensus.BIP34Height = 0;
         consensus.BIP34Hash = uint256S("0x08303e4552b32f1451c7a187f3ba0bb6d8d85ebce6e1645587f5408a64877d1f");
-        consensus.BIP65Height = 99999999;
-        consensus.BIP66Height = 99999999;
-        consensus.CSVHeight = std::numeric_limits<int>::max();
-        consensus.SegwitHeight = std::numeric_limits<int>::max();
-        consensus.TaprootHeight = std::numeric_limits<int>::max();
-        consensus.DisabledScriptReactivationHeight = std::numeric_limits<int>::max();
-        consensus.MWEBHeight = std::numeric_limits<int>::max();
+        consensus.BIP65Height = 1000;
+        consensus.BIP66Height = 1000;
+        consensus.CSVHeight = 1500;
+        consensus.SegwitHeight = 2000;
+        consensus.TaprootHeight = 2500;
+        consensus.DisabledScriptReactivationHeight = 2500;
+        consensus.MWEBHeight = 3000;
         consensus.MinBIP9WarningHeight = 10080 + 10080;
         consensus.powLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 4 * 60;
         consensus.nPowTargetSpacing = 4 * 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
-        consensus.fPowNoRetargeting = false;
+        consensus.fPowNoRetargeting = true; // Lock difficulty at powLimit for easy CPU mining
         consensus.nRuleChangeActivationThreshold = 9576;
         consensus.nMinerConfirmationWindow = 10080;
 
         consensus.nAuxpowChainId = 0x4C4E;
         consensus.fStrictChainId = true;
-        consensus.nAuxpowStartHeight = std::numeric_limits<int>::max();
-        consensus.nBlockAfterAuxpowRewardThreshold = 0;
+        consensus.nAuxpowStartHeight = 3500;
+        consensus.nBlockAfterAuxpowRewardThreshold = 5;
         consensus.nLegacyBlocksBefore = -1;
 
         consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000000000000000000000000000");
@@ -337,13 +337,13 @@ public:
         consensus.BIP16Height = 0;
         consensus.BIP34Height = 0;
         consensus.BIP34Hash = uint256S("0x00");
-        consensus.BIP65Height = 99999999;
-        consensus.BIP66Height = 99999999;
-        consensus.CSVHeight = 0;
-        consensus.SegwitHeight = 0;
-        consensus.TaprootHeight = 0;
-        consensus.DisabledScriptReactivationHeight = 0;
-        consensus.MWEBHeight = 0;
+        consensus.BIP65Height = 100;
+        consensus.BIP66Height = 100;
+        consensus.CSVHeight = 200;
+        consensus.SegwitHeight = 300;
+        consensus.TaprootHeight = 400;
+        consensus.DisabledScriptReactivationHeight = 400;
+        consensus.MWEBHeight = 500;
         consensus.MinBIP9WarningHeight = 0;
         consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 4 * 60;
@@ -353,10 +353,10 @@ public:
         consensus.nRuleChangeActivationThreshold = 108;
         consensus.nMinerConfirmationWindow = 144;
 
-        consensus.nAuxpowChainId = 0;
-        consensus.fStrictChainId = false;
-        consensus.nAuxpowStartHeight = 0;
-        consensus.nBlockAfterAuxpowRewardThreshold = 0;
+        consensus.nAuxpowChainId = 0x4C4E;
+        consensus.fStrictChainId = true;
+        consensus.nAuxpowStartHeight = 600;
+        consensus.nBlockAfterAuxpowRewardThreshold = 5;
         consensus.nLegacyBlocksBefore = -1;
 
         consensus.nMinimumChainWork = uint256S("0x00");

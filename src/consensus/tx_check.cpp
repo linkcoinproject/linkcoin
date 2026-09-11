@@ -49,8 +49,8 @@ bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
 
     if (tx.IsCoinBase())
     {
-        // Linkcoin: Genesis block has 102 byte coinbase, so allow up to 110 bytes
-        if (tx.vin[0].scriptSig.size() < 2 || tx.vin[0].scriptSig.size() > 110)
+        // Linkcoin: Genesis block has 111 byte coinbase scriptSig (legacy allows up to 150)
+        if (tx.vin[0].scriptSig.size() < 2 || tx.vin[0].scriptSig.size() > 150)
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-cb-length");
     }
     else
