@@ -55,6 +55,20 @@ jobs:
           ./src/linkcoind -version
           ./src/linkcoin-cli -version || true
 
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp -f src/linkcoind    dist/linkcoind-linux-x86_64
+          cp -f src/linkcoin-cli dist/linkcoin-cli-linux-x86_64
+          cp -f src/linkcoin-tx  dist/linkcoin-tx-linux-x86_64
+          cp -f src/qt/linkcoin-qt dist/linkcoin-qt-linux-x86_64 2>/dev/null || true
+          (cd dist && zip -9 linkcoin-linux-x86_64.zip *)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: dist/*
+
   linux-arm64:
     name: Linux aarch64
     runs-on: ubuntu-22.04-arm
@@ -103,6 +117,19 @@ jobs:
           ./src/linkcoind -version
           ./src/linkcoin-cli -version || true
 
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp -f src/linkcoind    dist/linkcoind-linux-aarch64
+          cp -f src/linkcoin-cli dist/linkcoin-cli-linux-aarch64
+          cp -f src/linkcoin-tx  dist/linkcoin-tx-linux-aarch64
+          (cd dist && zip -9 linkcoin-linux-aarch64.zip *)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-aarch64
+          path: dist/*
+
   windows:
     name: Windows x86_64
     runs-on: ubuntu-22.04
@@ -150,6 +177,19 @@ jobs:
         run: |
           file src/linkcoind.exe
           file src/linkcoin-cli.exe
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp -f src/linkcoind.exe    dist/linkcoind-windows-x86_64.exe
+          cp -f src/linkcoin-cli.exe dist/linkcoin-cli-windows-x86_64.exe
+          cp -f src/linkcoin-tx.exe  dist/linkcoin-tx-windows-x86_64.exe
+          (cd dist && zip -9 linkcoin-windows-x86_64.zip *)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: dist/*
 
   macos:
     name: macOS arm64
@@ -206,3 +246,16 @@ jobs:
         run: |
           ./src/linkcoind -version
           ./src/linkcoin-cli -version || true
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp -f src/linkcoind    dist/linkcoind-macos-arm64
+          cp -f src/linkcoin-cli dist/linkcoin-cli-macos-arm64
+          cp -f src/linkcoin-tx  dist/linkcoin-tx-macos-arm64
+          (cd dist && zip -9 linkcoin-macos-arm64.zip *)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: dist/*
