@@ -135,7 +135,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     pblock->nVersion = VERSIONBITS_TOP_BITS | 4; // base version 4, chain ID 0
     if (nHeight >= chainparams.GetConsensus().nAuxpowStartHeight) {
         pblock->SetChainId(chainparams.GetConsensus().nAuxpowChainId);
-        pblock->nVersion |= VERSION_AUXPOW;
+        pblock->nVersion |= CPureBlockHeader::VERSION_AUXPOW;
     }
     // -regtest only: allow overriding block.nVersion
     if (chainparams.MineBlocksOnDemand())
